@@ -17,6 +17,16 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen name="auth/signup" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="auth/login" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="auth/otp" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="auth/forgot-password" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="movie/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="booking/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="buffet/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="booking-seats/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="booking-payment/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="booking-success/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
