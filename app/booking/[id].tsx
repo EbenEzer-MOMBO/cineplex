@@ -1,9 +1,11 @@
 import { SelectionButton } from '@/components/selection-button';
+import { SessionSelectorModal } from '@/components/session-selector-modal';
 import { Stepper } from '@/components/stepper';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { moviesApi } from '@/services/api';
+import { Session } from '@/services/sessionService';
 import { Movie } from '@/types/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -16,8 +18,9 @@ export default function BookingScreen() {
   const [loading, setLoading] = useState(true);
   
   const [selectedTheater, setSelectedTheater] = useState<string>('');
-  const [selectedSession, setSelectedSession] = useState<string>('');
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [selectedBuffet, setSelectedBuffet] = useState<string>('');
+  const [showSessionModal, setShowSessionModal] = useState(false);
   
   useEffect(() => {
     const loadMovie = async () => {
@@ -37,7 +40,34 @@ export default function BookingScreen() {
     }
   }, [id]);
 
-  const canProceed = selectedTheater && selectedSession;
+  const canProceed = selectedSession;
+
+  const handleSessionSelect = (session: Session) => {
+    setSelectedSession(session);
+  };
+
+  const formatSessionDisplay = (session: Session): string => {
+    // Formater l'heure
+    const time = session.start_time.includes('T') 
+      ? session.start_time.split('T')[1].substring(0, 5)
+      : session.start_time.substring(0, 5);
+    
+    // Formater la date manuellement
+    const dateOnly = session.session_date.includes('T') 
+      ? session.session_date.split('T')[0] 
+      : session.session_date;
+    
+    const [year, month, day] = dateOnly.split('-').map(Number);
+    
+    // Mois en français (abrégés)
+    const months = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 
+                    'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+    
+    const dayNum = day.toString().padStart(2, '0');
+    const monthName = months[month - 1];
+    
+    return `${dayNum} ${monthName} à ${time}`;
+  };
 
   if (loading || !movie) {
     return (
@@ -92,28 +122,16 @@ export default function BookingScreen() {
 
         {/* Selection Buttons */}
         <View style={styles.selections}>
-          <SelectionButton
-            label="Choisir un Cinéma"
-            value={selectedTheater}
-            required
-            onPress={() => {
-              // TODO: Open theater selection modal
-              setSelectedTheater('Cineplex Odeon');
-            }}
-          />
           
           <SelectionButton
             label="Sélectionner une Séance"
-            value={selectedSession}
+            value={selectedSession ? formatSessionDisplay(selectedSession) : ''}
             required
-            onPress={() => {
-              // TODO: Open session selection modal
-              setSelectedSession('20h30');
-            }}
+            onPress={() => setShowSessionModal(true)}
           />
           
           <SelectionButton
-            label="Produits Buffet"
+            label="Consommations"
             value={selectedBuffet}
             onPress={() => {
               router.push(`/buffet/${id}`);
@@ -122,13 +140,23 @@ export default function BookingScreen() {
         </View>
       </ScrollView>
 
+      {/* Session Selector Modal */}
+      <SessionSelectorModal
+        visible={showSessionModal}
+        movieId={parseInt(id as string)}
+        onClose={() => setShowSessionModal(false)}
+        onSelect={handleSessionSelect}
+      />
+
       {/* Next Button */}
       <View style={styles.bottomContainer}>
         <Pressable 
           style={[styles.nextButton, !canProceed && styles.nextButtonDisabled]}
           disabled={!canProceed}
           onPress={() => {
-            router.push(`/booking-seats/${id}`);
+            if (selectedSession) {
+              router.push(`/booking-seats/${id}?sessionId=${selectedSession.id}`);
+            }
           }}
         >
           <ThemedText style={[styles.nextButtonText, !canProceed && styles.nextButtonTextDisabled]}>
@@ -149,11 +177,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1C1C1E',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   loadingContainer: {
     flex: 1,

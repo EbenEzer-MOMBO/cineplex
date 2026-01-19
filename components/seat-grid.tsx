@@ -1,31 +1,27 @@
+import { Seat } from '@/services/seatService';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ThemedText } from './themed-text';
 
-export type SeatStatus = 'available' | 'selected' | 'occupied' | 'vip';
-
-export interface Seat {
-  id: string;
-  row: string;
-  number: number;
-  section: 'left' | 'center' | 'right';
-  status: SeatStatus;
-}
-
 interface SeatGridProps {
   seats: Seat[];
+  selectedSeatIds: number[];
   onSeatPress: (seat: Seat) => void;
   maxSeats?: number;
 }
 
-export function SeatGrid({ seats, onSeatPress, maxSeats }: SeatGridProps) {
+export function SeatGrid({ seats, selectedSeatIds, onSeatPress, maxSeats }: SeatGridProps) {
   const rows = [...new Set(seats.map(seat => seat.row))].sort();
 
-  const getSeatColor = (status: SeatStatus) => {
-    switch (status) {
+  const getSeatColor = (seat: Seat) => {
+    const isSelected = selectedSeatIds.includes(seat.id);
+    
+    if (isSelected) {
+      return '#5B7FFF'; // Sélectionné
+    }
+    
+    switch (seat.status) {
       case 'available':
         return '#8E8E93';
-      case 'selected':
-        return '#5B7FFF';
       case 'occupied':
         return '#3A3A3C';
       case 'vip':
@@ -42,22 +38,23 @@ export function SeatGrid({ seats, onSeatPress, maxSeats }: SeatGridProps) {
       return <View key={`${row}-${section}-${number}`} style={styles.emptySeat} />;
     }
 
-    const isDisabled = seat.status === 'occupied';
-    const canSelect = maxSeats ? seats.filter(s => s.status === 'selected').length < maxSeats || seat.status === 'selected' : true;
+    const isSelected = selectedSeatIds.includes(seat.id);
+    const isDisabled = !seat.is_available && !isSelected;
+    const canSelect = maxSeats ? selectedSeatIds.length < maxSeats || isSelected : true;
 
     return (
       <Pressable
         key={seat.id}
         style={[
           styles.seat,
-          { backgroundColor: getSeatColor(seat.status) },
+          { backgroundColor: getSeatColor(seat) },
         ]}
         onPress={() => {
           if (!isDisabled && canSelect) {
             onSeatPress(seat);
           }
         }}
-        disabled={isDisabled}
+        disabled={isDisabled && !isSelected}
       />
     );
   };
@@ -220,4 +217,3 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
 });
-

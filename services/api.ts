@@ -1,6 +1,5 @@
 import { Movie, PaginatedResponse } from '@/types/api';
-
-const API_BASE_URL = 'https://cineplex-main-fkwtm3.laravel.cloud/api/v1';
+import { buildApiUrl } from './config';
 
 export const moviesApi = {
   /**
@@ -24,7 +23,7 @@ export const moviesApi = {
       if (params?.per_page) queryParams.append('per_page', params.per_page.toString());
       if (params?.page) queryParams.append('page', params.page.toString());
 
-      const url = `${API_BASE_URL}/movies${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      const url = `${buildApiUrl('movies')}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
       
       const response = await fetch(url);
       
@@ -77,7 +76,7 @@ export const moviesApi = {
    */
   async getMovieById(id: number): Promise<Movie | null> {
     try {
-      const response = await fetch(`${API_BASE_URL}/movies/${id}`);
+      const response = await fetch(buildApiUrl(`movies/${id}`));
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

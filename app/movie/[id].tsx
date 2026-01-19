@@ -101,11 +101,11 @@ export default function MovieDetailsScreen() {
           </View>
 
           {/* Bouton play */}
-          <View style={styles.playButtonContainer}>
+          {/* <View style={styles.playButtonContainer}>
             <Pressable style={styles.playButton}>
               <IconSymbol name="play.fill" size={32} color="#FFFFFF" />
             </Pressable>
-          </View>
+          </View> */}
 
             {/* Poster et infos principales par-dessus l'image */}
             <View style={styles.mainInfo}>
@@ -142,7 +142,7 @@ export default function MovieDetailsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.dot} />
-              <ThemedText style={styles.sectionTitle}>Movie Subject</ThemedText>
+              <ThemedText style={styles.sectionTitle}>Synopsis</ThemedText>
             </View>
             <ThemedText style={styles.synopsis}>
               {movie.synopsis}
@@ -153,7 +153,7 @@ export default function MovieDetailsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.dot} />
-              <ThemedText style={styles.sectionTitle}>Images From the Movie</ThemedText>
+              <ThemedText style={styles.sectionTitle}>Images du film</ThemedText>
             </View>
             <ScrollView 
               horizontal 
@@ -186,7 +186,7 @@ export default function MovieDetailsScreen() {
           style={styles.buyButton}
           onPress={() => router.push(`/booking/${movie.id}`)}
         >
-          <ThemedText style={styles.buyButtonText}>Buy Ticket Now</ThemedText>
+          <ThemedText style={styles.buyButtonText}>Réserver maintenant</ThemedText>
           <IconSymbol name="chevron.right" size={24} color="#FFFFFF" />
         </Pressable>
       </View>

@@ -1,169 +1,134 @@
-import { Seat, SeatGrid, SeatStatus } from '@/components/seat-grid';
+import { SeatGrid } from '@/components/seat-grid';
 import { Stepper } from '@/components/stepper';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TicketCounter } from '@/components/ticket-counter';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { moviesApi } from '@/services/api';
+import { getSessionSeats, Seat } from '@/services/seatService';
+import { getSessionById, Session } from '@/services/sessionService';
 import { Movie } from '@/types/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function BookingSeatsScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, sessionId } = useLocalSearchParams();
   const router = useRouter();
   const [movie, setMovie] = useState<Movie | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingSeats, setLoadingSeats] = useState(true);
   
-  const [adultCount, setAdultCount] = useState(2);
-  const [childCount, setChildCount] = useState(0);
+  const [participantCount, setParticipantCount] = useState(1);
   const [seats, setSeats] = useState<Seat[]>([]);
+  const [selectedSeatIds, setSelectedSeatIds] = useState<number[]>([]);
   
-  const totalTickets = adultCount + childCount;
-  const selectedSeats = seats.filter(s => s.status === 'selected');
-  const pricePerTicket = 5000; // 5000f par ticket
-  const totalAmount = totalTickets * pricePerTicket;
+  const selectedSeats = seats.filter(s => selectedSeatIds.includes(s.id));
+  const pricePerTicket = session?.price_per_ticket ? parseFloat(session.price_per_ticket.toString()) : 5000;
+  const totalAmount = participantCount * pricePerTicket;
   
-  // Charger les données du film
+  // Charger les données du film et de la séance
   useEffect(() => {
-    const loadMovie = async () => {
+    const loadData = async () => {
       try {
         setLoading(true);
+        
+        // Charger le film
         const movieData = await moviesApi.getMovieById(Number(id));
         setMovie(movieData);
+        
+        // Charger la séance si sessionId est fourni
+        if (sessionId) {
+          const sessionData = await getSessionById(Number(sessionId));
+          setSession(sessionData.data);
+        }
       } catch (error) {
-        console.error('Error loading movie:', error);
+        console.error('Error loading data:', error);
+        Alert.alert('Erreur', 'Impossible de charger les données');
       } finally {
         setLoading(false);
       }
     };
 
     if (id) {
-      loadMovie();
+      loadData();
     }
-  }, [id]);
+  }, [id, sessionId]);
 
-  // Générer les sièges initiaux
+  // Charger les sièges depuis l'API
   useEffect(() => {
-    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-    const initialSeats: Seat[] = [];
-    
-    rows.forEach((row) => {
-      // Section gauche - 7 sièges
-      for (let number = 1; number <= 7; number++) {
-        let status: SeatStatus = 'available';
-        
-        // Quelques sièges occupés
-        if ((row === 'B' && [3].includes(number)) ||
-            (row === 'D' && number === 2) ||
-            (row === 'G' && [3, 4].includes(number))) {
-          status = 'occupied';
-        }
-        
-        initialSeats.push({
-          id: `${row}L${number}`,
-          row,
-          number,
-          section: 'left',
-          status,
-        });
-      }
+    const loadSeats = async () => {
+      if (!sessionId) return;
       
-      // Section centrale - 10 sièges
-      for (let number = 1; number <= 10; number++) {
-        let status: SeatStatus = 'available';
-        
-        // Quelques sièges occupés
-        if ((row === 'B' && [6, 7].includes(number)) ||
-            (row === 'C' && [8, 9].includes(number)) ||
-            (row === 'F' && number === 6)) {
-          status = 'occupied';
-        }
-        
-        // Quelques sièges sélectionnés au départ
-        if (row === 'C' && [3, 4].includes(number)) {
-          status = 'selected';
-        }
-        
-        // Sièges VIP (oranges)
-        if (row === 'C' && [8, 9].includes(number)) {
-          status = 'vip';
-        }
-        
-        initialSeats.push({
-          id: `${row}C${number}`,
-          row,
-          number,
-          section: 'center',
-          status,
-        });
+      try {
+        setLoadingSeats(true);
+        const response = await getSessionSeats(Number(sessionId));
+        setSeats(response.data);
+      } catch (error) {
+        console.error('Error loading seats:', error);
+        Alert.alert('Erreur', 'Impossible de charger les sièges');
+      } finally {
+        setLoadingSeats(false);
       }
-      
-      // Section droite - 7 sièges
-      for (let number = 1; number <= 7; number++) {
-        let status: SeatStatus = 'available';
-        
-        // Quelques sièges occupés
-        if ((row === 'D' && number === 7) ||
-            (row === 'G' && [6, 7].includes(number))) {
-          status = 'occupied';
-        }
-        
-        initialSeats.push({
-          id: `${row}R${number}`,
-          row,
-          number,
-          section: 'right',
-          status,
-        });
-      }
-    });
-    
-    setSeats(initialSeats);
-  }, []);
+    };
+
+    loadSeats();
+  }, [sessionId]);
 
   const handleSeatPress = (seat: Seat) => {
-    setSeats(prevSeats =>
-      prevSeats.map(s =>
-        s.id === seat.id
-          ? { ...s, status: s.status === 'selected' ? 'available' : 'selected' }
-          : s
-      )
-    );
-  };
+    // Vérifier si le siège est disponible
+    if (!seat.is_available) {
+      return;
+    }
 
-  const handleAdultIncrement = () => {
-    if (adultCount + childCount < 10) {
-      setAdultCount(adultCount + 1);
+    const isSelected = selectedSeatIds.includes(seat.id);
+
+    if (isSelected) {
+      // Désélectionner le siège
+      setSelectedSeatIds(prev => prev.filter(id => id !== seat.id));
+    } else {
+      // Vérifier si on n'a pas dépassé le nombre de participants
+      if (selectedSeatIds.length >= participantCount) {
+        Alert.alert(
+          'Limite atteinte',
+          `Vous ne pouvez sélectionner que ${participantCount} siège(s). Désélectionnez un siège ou augmentez le nombre de participants.`
+        );
+        return;
+      }
+      // Sélectionner le siège
+      setSelectedSeatIds(prev => [...prev, seat.id]);
     }
   };
 
-  const handleAdultDecrement = () => {
-    if (adultCount > 0) {
-      setAdultCount(adultCount - 1);
+  const handleParticipantIncrement = () => {
+    if (participantCount < 10) {
+      setParticipantCount(participantCount + 1);
     }
   };
 
-  const handleChildIncrement = () => {
-    if (adultCount + childCount < 10) {
-      setChildCount(childCount + 1);
+  const handleParticipantDecrement = () => {
+    if (participantCount > 1) {
+      const newCount = participantCount - 1;
+      setParticipantCount(newCount);
+      
+      // Si on a trop de sièges sélectionnés, on enlève les derniers
+      if (selectedSeatIds.length > newCount) {
+        setSelectedSeatIds(prev => prev.slice(0, newCount));
+      }
     }
   };
 
-  const handleChildDecrement = () => {
-    if (childCount > 0) {
-      setChildCount(childCount - 1);
-    }
-  };
+  const canProceed = selectedSeats.length === participantCount && participantCount > 0;
 
-  const canProceed = selectedSeats.length === totalTickets && totalTickets > 0;
-
-  if (loading || !movie) {
+  if (loading || !movie || loadingSeats) {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#5B7FFF" />
+          <ThemedText style={styles.loadingText}>
+            {loadingSeats ? 'Chargement des sièges...' : 'Chargement...'}
+          </ThemedText>
         </View>
       </ThemedView>
     );
@@ -192,8 +157,9 @@ export default function BookingSeatsScreen() {
         {/* Seat Grid */}
         <SeatGrid 
           seats={seats}
+          selectedSeatIds={selectedSeatIds}
           onSeatPress={handleSeatPress}
-          maxSeats={totalTickets}
+          maxSeats={participantCount}
         />
 
         {/* Détails du ticket */}
@@ -203,25 +169,14 @@ export default function BookingSeatsScreen() {
             <ThemedText style={styles.sectionTitle}>Détails du Ticket</ThemedText>
           </View>
 
-          {/* Counters */}
+          {/* Counter */}
           <View style={styles.countersContainer}>
             <TicketCounter
-              label="ADULTE"
-              count={adultCount}
-              onIncrement={handleAdultIncrement}
-              onDecrement={handleAdultDecrement}
-              min={0}
-              max={10}
-            />
-            
-            <View style={styles.divider} />
-            
-            <TicketCounter
-              label="ENFANT"
-              count={childCount}
-              onIncrement={handleChildIncrement}
-              onDecrement={handleChildDecrement}
-              min={0}
+              label="PARTICIPANTS"
+              count={participantCount}
+              onIncrement={handleParticipantIncrement}
+              onDecrement={handleParticipantDecrement}
+              min={1}
               max={10}
             />
           </View>
@@ -230,45 +185,55 @@ export default function BookingSeatsScreen() {
           <View style={styles.summaryContainer}>
             <View style={styles.summaryLeft}>
               <ThemedText style={styles.summaryLabel}>
-                Film: <ThemedText style={styles.summaryValue}>Kung Fu Panda 4</ThemedText>
+                Film: <ThemedText style={styles.summaryValue}>{movie.title}</ThemedText>
               </ThemedText>
               
               <ThemedText style={styles.summaryLabel}>
-                Nombre de tickets: <ThemedText style={styles.summaryValue}>{totalTickets} Adulte</ThemedText>
+                Participants: <ThemedText style={styles.summaryValue}>{participantCount}</ThemedText>
               </ThemedText>
               
               <ThemedText style={styles.summaryLabel}>
-                <ThemedText style={styles.summaryHighlight}>( {pricePerTicket}f )</ThemedText>
-              </ThemedText>
-              
-              <ThemedText style={styles.summaryLabel}>
-                Séance: <ThemedText style={styles.summaryValue}>20h30 - 22h00</ThemedText>
-              </ThemedText>
-              
-              <ThemedText style={styles.summaryLabel} numberOfLines={2}>
-                Numéros de siège: <ThemedText style={styles.summaryValue}>
-                  {selectedSeats.map(s => s.id).join(', ') || 'Aucun'}
+                <ThemedText style={styles.summaryHighlight}>
+                  ( {pricePerTicket.toLocaleString('fr-FR', { 
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0 
+                  })} F / ticket )
                 </ThemedText>
               </ThemedText>
               
               <ThemedText style={styles.summaryLabel}>
-                Produits buffet: <ThemedText style={styles.summaryValue}>Aucun ( 0f )</ThemedText>
+                Séance: <ThemedText style={styles.summaryValue}>
+                  {session?.formatted_date ? `${session.formatted_date} à ${session.formatted_time}` : '---'}
+                </ThemedText>
               </ThemedText>
               
-              <ThemedText style={styles.summaryLabel} numberOfLines={2}>
-                Cinéma: <ThemedText style={styles.summaryValue}>Cineplex Millennium</ThemedText>
+              <ThemedText style={styles.summaryLabel} numberOfLines={3}>
+                Sièges: <ThemedText style={styles.summaryValue}>
+                  {selectedSeats.length > 0 
+                    ? selectedSeats.map(s => s.seat_code).join(', ')
+                    : 'Aucun siège sélectionné'}
+                </ThemedText>
+              </ThemedText>
+              
+              <ThemedText style={styles.summaryLabel}>
+                Buffet: <ThemedText style={styles.summaryValue}>Aucun ( 0 F )</ThemedText>
               </ThemedText>
             </View>
 
             <View style={styles.verticalDivider}>
-              {Array.from({ length: 55 }).map((_, index) => (
+              {Array.from({ length: 45 }).map((_, index) => (
                 <View key={index} style={styles.dottedLine} />
               ))}
             </View>
 
             <View style={styles.summaryRight}>
               <ThemedText style={styles.totalLabel}>Montant Total</ThemedText>
-              <ThemedText style={styles.totalAmount}>{totalAmount.toLocaleString('fr-FR')}f</ThemedText>
+              <ThemedText style={styles.totalAmount}>
+                {totalAmount.toLocaleString('fr-FR', { 
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0 
+                })} F
+              </ThemedText>
             </View>
           </View>
         </View>
@@ -280,7 +245,9 @@ export default function BookingSeatsScreen() {
           style={[styles.paymentButton, !canProceed && styles.paymentButtonDisabled]}
           disabled={!canProceed}
           onPress={() => {
-            router.push(`/booking-payment/${id}`);
+            if (sessionId) {
+              router.push(`/booking-payment/${id}?sessionId=${sessionId}&participants=${participantCount}&seats=${selectedSeatIds.join(',')}`);
+            }
           }}
         >
           <ThemedText style={[styles.paymentButtonText, !canProceed && styles.paymentButtonTextDisabled]}>
@@ -306,6 +273,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#8E8E93',
   },
   header: {
     paddingTop: 60,
