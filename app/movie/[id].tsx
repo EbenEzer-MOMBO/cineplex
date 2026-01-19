@@ -1,63 +1,47 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { moviesApi } from '@/services/api';
+import { Movie } from '@/types/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-
-// Données de films avec images TMDB
-const moviesData: { [key: string]: any } = {
-  '1': {
-    id: '1',
-    title: 'Kung Fu Panda 4',
-    studio: 'DreamWorks Animation',
-    rating: 4,
-    imdbRating: '8.1',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/kDp1vUBnMpe8ak4rjgl3cLELqjU.jpg',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/kDp1vUBnMpe8ak4rjgl3cLELqjU.jpg',
-    synopsis: 'After Po is tapped to become the Spiritual Leader of the Valley of Peace, he needs to find and train a new Dragon Warrior, while a wicked sorceress plans to re-summon all the master villains whom Po has vanquished to the spirit realm...',
-    images: [
-      'https://image.tmdb.org/t/p/w500/kDp1vUBnMpe8ak4rjgl3cLELqjU.jpg',
-      'https://image.tmdb.org/t/p/w500/6B0vrFi5JJiKhKAlUG1QnYQFGsh.jpg',
-    ],
-  },
-  '2': {
-    id: '2',
-    title: 'Dune: Part Two',
-    studio: 'Warner Bros. Pictures',
-    rating: 5,
-    imdbRating: '8.9',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/xOMo8BRK7PfcJv9JCnx7s5hj0PX.jpg',
-    synopsis: 'Follow the mythic journey of Paul Atreides as he unites with Chani and the Fremen while on a path of revenge against the conspirators who destroyed his family.',
-    images: [
-      'https://image.tmdb.org/t/p/w500/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg',
-      'https://image.tmdb.org/t/p/w500/8b8R8l88Qje9dn9OE8PY05Nxl1X.jpg',
-    ],
-  },
-  '3': {
-    id: '3',
-    title: 'Deadpool & Wolverine',
-    studio: 'Marvel Studios',
-    rating: 4,
-    imdbRating: '8.5',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/8cdWjvZQUExUUTzyp4t6EDMubfO.jpg',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/yDHYTfA3R0jFYba16jBB1ef8oIt.jpg',
-    synopsis: 'A listless Wade Wilson toils away in civilian life with his days as the morally flexible mercenary, Deadpool, behind him. But when his homeworld faces an existential threat, Wade must reluctantly suit-up again.',
-    images: [
-      'https://image.tmdb.org/t/p/w500/8cdWjvZQUExUUTzyp4t6EDMubfO.jpg',
-      'https://image.tmdb.org/t/p/w500/9l1eZiJHmhr5jIlthMdJN5WYoff.jpg',
-    ],
-  },
-};
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function MovieDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const [isFavorite, setIsFavorite] = useState(false);
-  
-  const movie = moviesData[id as string] || moviesData['1'];
+  const [movie, setMovie] = useState<Movie | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadMovie = async () => {
+      try {
+        setLoading(true);
+        const movieData = await moviesApi.getMovieById(Number(id));
+        setMovie(movieData);
+      } catch (error) {
+        console.error('Error loading movie:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      loadMovie();
+    }
+  }, [id]);
+
+  if (loading || !movie) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#5B7FFF" />
+        </View>
+      </ThemedView>
+    );
+  }
 
   const renderStars = (rating: number) => {
     return Array.from({ length: 5 }, (_, index) => (
@@ -70,19 +54,23 @@ export default function MovieDetailsScreen() {
     ));
   };
 
+  const movieImages = movie.images && movie.images.length > 0 
+    ? movie.images.map(img => img.image_url)
+    : [movie.poster_url];
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView 
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header avec image backdrop */}
-        <View style={styles.headerContainer}>
-          <Image 
-            source={{ uri: movie.backdropUrl }}
-            style={styles.backdropImage}
-            resizeMode="cover"
-          />
+          {/* Header avec image backdrop */}
+          <View style={styles.headerContainer}>
+            <Image 
+              source={{ uri: movie.backdrop_url }}
+              style={styles.backdropImage}
+              resizeMode="cover"
+            />
           
           {/* Overlay dégradé pour améliorer la lisibilité */}
           <LinearGradient
@@ -119,33 +107,33 @@ export default function MovieDetailsScreen() {
             </Pressable>
           </View>
 
-          {/* Poster et infos principales par-dessus l'image */}
-          <View style={styles.mainInfo}>
-            <Image 
-              source={{ uri: movie.posterUrl }}
-              style={styles.posterImage}
-              resizeMode="cover"
-            />
-            
-            <View style={styles.infoContainer}>
-              <ThemedText style={styles.title}>{movie.title}</ThemedText>
-              <ThemedText style={styles.studio}>{movie.studio}</ThemedText>
+            {/* Poster et infos principales par-dessus l'image */}
+            <View style={styles.mainInfo}>
+              <Image 
+                source={{ uri: movie.poster_url }}
+                style={styles.posterImage}
+                resizeMode="cover"
+              />
               
-              <View style={styles.ratingContainer}>
-                <View style={styles.starsContainer}>
-                  {renderStars(movie.rating)}
+              <View style={styles.infoContainer}>
+                <ThemedText style={styles.title}>{movie.title}</ThemedText>
+                {movie.studio && <ThemedText style={styles.studio}>{movie.studio}</ThemedText>}
+                
+                <View style={styles.ratingContainer}>
+                  <View style={styles.starsContainer}>
+                    {renderStars(movie.rating)}
+                  </View>
+                  <ThemedText style={styles.ratingText}>({movie.rating}/5)</ThemedText>
                 </View>
-                <ThemedText style={styles.ratingText}>({movie.rating}/5)</ThemedText>
-              </View>
 
-              <View style={styles.imdbContainer}>
-                <View style={styles.imdbBadge}>
-                  <ThemedText style={styles.imdbText}>IMDb</ThemedText>
+                <View style={styles.imdbContainer}>
+                  <View style={styles.imdbBadge}>
+                    <ThemedText style={styles.imdbText}>IMDb</ThemedText>
+                  </View>
+                  <ThemedText style={styles.imdbRating}>{movie.imdb_rating.toFixed(1)}</ThemedText>
                 </View>
-                <ThemedText style={styles.imdbRating}>{movie.imdbRating}</ThemedText>
               </View>
             </View>
-          </View>
         </View>
 
         {/* Contenu */}
@@ -157,8 +145,7 @@ export default function MovieDetailsScreen() {
               <ThemedText style={styles.sectionTitle}>Movie Subject</ThemedText>
             </View>
             <ThemedText style={styles.synopsis}>
-              {movie.synopsis}{' '}
-              <ThemedText style={styles.seeAll}>See All</ThemedText>
+              {movie.synopsis}
             </ThemedText>
           </View>
 
@@ -173,7 +160,7 @@ export default function MovieDetailsScreen() {
               showsHorizontalScrollIndicator={false}
               style={styles.imagesScroll}
             >
-              {movie.images.map((imageUrl: string, index: number) => (
+              {movieImages.map((imageUrl: string, index: number) => (
                 <Image 
                   key={index}
                   source={{ uri: imageUrl }}
@@ -211,6 +198,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1C1C1E',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,

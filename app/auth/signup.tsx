@@ -1,21 +1,90 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { authService } from '@/services/auth';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 export default function SignUpScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-  const handleSignUp = () => {
-    // TODO: Implement sign up logic
-    console.log('Sign up:', { name, email, password, phone });
-    router.push('/auth/otp');
+  const validateForm = () => {
+    const newErrors: { [key: string]: string } = {};
+
+    if (!name.trim()) {
+      newErrors.name = 'Le nom est requis';
+    }
+
+    if (!email.trim()) {
+      newErrors.email = 'L\'email est requis';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      newErrors.email = 'Format d\'email invalide';
+    }
+
+    if (!password) {
+      newErrors.password = 'Le mot de passe est requis';
+    } else if (password.length < 8) {
+      newErrors.password = 'Le mot de passe doit contenir au moins 8 caractères';
+    }
+
+    if (password !== passwordConfirmation) {
+      newErrors.passwordConfirmation = 'Les mots de passe ne correspondent pas';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
+
+  const handleSignUp = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setErrors({});
+
+      const response = await authService.register({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        password_confirmation: passwordConfirmation,
+        phone: phone.trim() || undefined,
+      });
+
+      // Rediriger vers la page OTP
+      router.push({
+        pathname: '/auth/otp',
+        params: { email: email.trim().toLowerCase() },
+      });
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      
+      if (error?.errors) {
+        // Erreurs de validation Laravel
+        const apiErrors: { [key: string]: string } = {};
+        Object.keys(error.errors).forEach((key) => {
+          apiErrors[key] = error.errors[key][0];
+        });
+        setErrors(apiErrors);
+      } else if (error?.message) {
+        Alert.alert('Erreur', error.message);
+      } else {
+        Alert.alert('Erreur', 'Une erreur est survenue lors de l\'inscription');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isFormValid = name.trim() && email.trim() && password && passwordConfirmation;
 
   return (
     <ThemedView style={styles.container}>
@@ -47,46 +116,108 @@ export default function SignUpScreen() {
 
         {/* Form */}
         <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Nom"
-            placeholderTextColor="#636366"
-            value={name}
-            onChangeText={setName}
-          />
+          <View>
+            <TextInput
+              style={[styles.input, errors.name && styles.inputError]}
+              placeholder="Nom"
+              placeholderTextColor="#636366"
+              value={name}
+              onChangeText={(text) => {
+                setName(text);
+                if (errors.name) {
+                  setErrors({ ...errors, name: '' });
+                }
+              }}
+              editable={!loading}
+            />
+            {errors.name && <ThemedText style={styles.errorText}>{errors.name}</ThemedText>}
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#636366"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+          <View>
+            <TextInput
+              style={[styles.input, errors.email && styles.inputError]}
+              placeholder="Email"
+              placeholderTextColor="#636366"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (errors.email) {
+                  setErrors({ ...errors, email: '' });
+                }
+              }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!loading}
+            />
+            {errors.email && <ThemedText style={styles.errorText}>{errors.email}</ThemedText>}
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Mot de passe"
-            placeholderTextColor="#636366"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+          <View>
+            <TextInput
+              style={[styles.input, errors.password && styles.inputError]}
+              placeholder="Mot de passe"
+              placeholderTextColor="#636366"
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (errors.password) {
+                  setErrors({ ...errors, password: '' });
+                }
+              }}
+              secureTextEntry
+              editable={!loading}
+            />
+            {errors.password && <ThemedText style={styles.errorText}>{errors.password}</ThemedText>}
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Numéro de téléphone"
-            placeholderTextColor="#636366"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-          />
+          <View>
+            <TextInput
+              style={[styles.input, errors.passwordConfirmation && styles.inputError]}
+              placeholder="Confirmer le mot de passe"
+              placeholderTextColor="#636366"
+              value={passwordConfirmation}
+              onChangeText={(text) => {
+                setPasswordConfirmation(text);
+                if (errors.passwordConfirmation) {
+                  setErrors({ ...errors, passwordConfirmation: '' });
+                }
+              }}
+              secureTextEntry
+              editable={!loading}
+            />
+            {errors.passwordConfirmation && <ThemedText style={styles.errorText}>{errors.passwordConfirmation}</ThemedText>}
+          </View>
+
+          <View>
+            <TextInput
+              style={[styles.input, errors.phone && styles.inputError]}
+              placeholder="Numéro de téléphone (optionnel)"
+              placeholderTextColor="#636366"
+              value={phone}
+              onChangeText={(text) => {
+                setPhone(text);
+                if (errors.phone) {
+                  setErrors({ ...errors, phone: '' });
+                }
+              }}
+              keyboardType="phone-pad"
+              editable={!loading}
+            />
+            {errors.phone && <ThemedText style={styles.errorText}>{errors.phone}</ThemedText>}
+          </View>
         </View>
 
         {/* Sign Up Button */}
-        <Pressable style={styles.signUpButton} onPress={handleSignUp}>
-          <ThemedText style={styles.signUpButtonText}>Créer un compte</ThemedText>
+        <Pressable 
+          style={[styles.signUpButton, (!isFormValid || loading) && styles.signUpButtonDisabled]} 
+          onPress={handleSignUp}
+          disabled={!isFormValid || loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.signUpButtonText}>Créer un compte</ThemedText>
+          )}
         </Pressable>
 
         {/* Sign In Link */}
@@ -94,7 +225,7 @@ export default function SignUpScreen() {
           <ThemedText style={styles.signInText}>
             Vous avez déjà un compte ?{' '}
           </ThemedText>
-          <Pressable onPress={() => router.push('/auth/login')}>
+          <Pressable onPress={() => router.push('/auth/login')} disabled={loading}>
             <ThemedText style={styles.signInLink}>Se connecter maintenant !</ThemedText>
           </Pressable>
         </View>
@@ -168,6 +299,17 @@ const styles = StyleSheet.create({
     padding: 18,
     fontSize: 16,
     color: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  inputError: {
+    borderColor: '#FF3B30',
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
   },
   signUpButton: {
     backgroundColor: '#5B7FFF',
@@ -175,6 +317,10 @@ const styles = StyleSheet.create({
     padding: 18,
     alignItems: 'center',
     marginBottom: 20,
+  },
+  signUpButtonDisabled: {
+    backgroundColor: '#3A4A8F',
+    opacity: 0.6,
   },
   signUpButtonText: {
     fontSize: 18,
@@ -197,4 +343,3 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-

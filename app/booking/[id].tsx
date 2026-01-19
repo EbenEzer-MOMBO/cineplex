@@ -3,42 +3,51 @@ import { Stepper } from '@/components/stepper';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { moviesApi } from '@/services/api';
+import { Movie } from '@/types/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-
-// Données de films (même que movie/[id].tsx)
-const moviesData: { [key: string]: any } = {
-  '1': {
-    id: '1',
-    title: 'Kung Fu Panda 4',
-    studio: 'DreamWorks Animation',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/kDp1vUBnMpe8ak4rjgl3cLELqjU.jpg',
-  },
-  '2': {
-    id: '2',
-    title: 'Dune: Part Two',
-    studio: 'Warner Bros. Pictures',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg',
-  },
-  '3': {
-    id: '3',
-    title: 'Deadpool & Wolverine',
-    studio: 'Marvel Studios',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/8cdWjvZQUExUUTzyp4t6EDMubfO.jpg',
-  },
-};
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function BookingScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const movie = moviesData[id as string] || moviesData['1'];
+  const [movie, setMovie] = useState<Movie | null>(null);
+  const [loading, setLoading] = useState(true);
   
   const [selectedTheater, setSelectedTheater] = useState<string>('');
   const [selectedSession, setSelectedSession] = useState<string>('');
   const [selectedBuffet, setSelectedBuffet] = useState<string>('');
   
+  useEffect(() => {
+    const loadMovie = async () => {
+      try {
+        setLoading(true);
+        const movieData = await moviesApi.getMovieById(Number(id));
+        setMovie(movieData);
+      } catch (error) {
+        console.error('Error loading movie:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      loadMovie();
+    }
+  }, [id]);
+
   const canProceed = selectedTheater && selectedSession;
+
+  if (loading || !movie) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#5B7FFF" />
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -63,13 +72,13 @@ export default function BookingScreen() {
         {/* Movie Info Card */}
         <View style={styles.movieCard}>
           <Image 
-            source={{ uri: movie.posterUrl }}
+            source={{ uri: movie.poster_url }}
             style={styles.movieImage}
             resizeMode="cover"
           />
           <View style={styles.movieInfo}>
             <ThemedText style={styles.movieTitle}>{movie.title}</ThemedText>
-            <ThemedText style={styles.movieStudio}>{movie.studio}</ThemedText>
+            {movie.studio && <ThemedText style={styles.movieStudio}>{movie.studio}</ThemedText>}
           </View>
           <Pressable style={styles.shuffleButton}>
             <IconSymbol name="arrow.triangle.2.circlepath" size={24} color="#FFFFFF" />
@@ -140,6 +149,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1C1C1E',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     paddingTop: 60,

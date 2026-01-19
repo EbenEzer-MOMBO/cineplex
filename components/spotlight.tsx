@@ -14,28 +14,34 @@ interface SpotlightMovie {
   image: any;
 }
 
-const spotlightMovies: SpotlightMovie[] = [
-  {
-    id: 'spotlight-1',
-    movieId: '1',
-    title: 'Kung Fu Panda 4',
-    image: { uri: 'https://image.tmdb.org/t/p/original/kDp1vUBnMpe8ak4rjgl3cLELqjU.jpg' },
-  },
-  {
-    id: 'spotlight-2',
-    movieId: '2',
-    title: 'Dune: Part Two',
-    image: { uri: 'https://image.tmdb.org/t/p/original/xOMo8BRK7PfcJv9JCnx7s5hj0PX.jpg' },
-  },
-  {
-    id: 'spotlight-3',
-    movieId: '3',
-    title: 'Deadpool & Wolverine',
-    image: { uri: 'https://image.tmdb.org/t/p/original/yDHYTfA3R0jFYba16jBB1ef8oIt.jpg' },
-  },
-];
+interface SpotlightProps {
+  movies?: SpotlightMovie[];
+}
 
-export function Spotlight() {
+export function Spotlight({ movies }: SpotlightProps) {
+  // Données par défaut si aucune n'est fournie
+  const defaultMovies: SpotlightMovie[] = [
+    {
+      id: 'spotlight-1',
+      movieId: '1',
+      title: 'Film 1',
+      image: require('@/assets/images/react-logo.png'),
+    },
+    {
+      id: 'spotlight-2',
+      movieId: '2',
+      title: 'Film 2',
+      image: require('@/assets/images/react-logo.png'),
+    },
+    {
+      id: 'spotlight-3',
+      movieId: '3',
+      title: 'Film 3',
+      image: require('@/assets/images/react-logo.png'),
+    },
+  ];
+
+  const spotlightMovies = movies && movies.length > 0 ? movies : defaultMovies;
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
   const router = useRouter();

@@ -1,19 +1,82 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/contexts/auth-context';
+import { authService } from '@/services/auth';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-  const handleLogin = () => {
-    // TODO: Implement login logic
-    console.log('Login:', { email, password });
-    router.push('/(tabs)');
+  const validateForm = () => {
+    const newErrors: { [key: string]: string } = {};
+
+    if (!email.trim()) {
+      newErrors.email = 'L\'email est requis';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      newErrors.email = 'Format d\'email invalide';
+    }
+
+    if (!password) {
+      newErrors.password = 'Le mot de passe est requis';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
+
+  const handleLogin = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setErrors({});
+
+      const response = await authService.login({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      if (response.requires_verification) {
+        // Le compte n'est pas vérifié, rediriger vers OTP
+        router.push({
+          pathname: '/auth/otp',
+          params: { email: email.trim().toLowerCase() },
+        });
+      } else if (response.token && response.customer) {
+        // Connexion réussie, sauvegarder le token et rediriger
+        await login(response.token, response.customer);
+        router.replace('/(tabs)');
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      
+      if (error?.errors) {
+        // Erreurs de validation Laravel
+        const apiErrors: { [key: string]: string } = {};
+        Object.keys(error.errors).forEach((key) => {
+          apiErrors[key] = error.errors[key][0];
+        });
+        setErrors(apiErrors);
+      } else if (error?.message) {
+        Alert.alert('Erreur', error.message);
+      } else {
+        Alert.alert('Erreur', 'Une erreur est survenue lors de la connexion');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isFormValid = email.trim() && password;
 
   return (
     <ThemedView style={styles.container}>
@@ -45,33 +108,59 @@ export default function LoginScreen() {
 
         {/* Form */}
         <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#636366"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+          <View>
+            <TextInput
+              style={[styles.input, errors.email && styles.inputError]}
+              placeholder="Email"
+              placeholderTextColor="#636366"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (errors.email) {
+                  setErrors({ ...errors, email: '' });
+                }
+              }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!loading}
+            />
+            {errors.email && <ThemedText style={styles.errorText}>{errors.email}</ThemedText>}
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Mot de passe"
-            placeholderTextColor="#636366"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+          <View>
+            <TextInput
+              style={[styles.input, errors.password && styles.inputError]}
+              placeholder="Mot de passe"
+              placeholderTextColor="#636366"
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (errors.password) {
+                  setErrors({ ...errors, password: '' });
+                }
+              }}
+              secureTextEntry
+              editable={!loading}
+            />
+            {errors.password && <ThemedText style={styles.errorText}>{errors.password}</ThemedText>}
+          </View>
 
-          <Pressable onPress={() => router.push('/auth/forgot-password')}>
+          <Pressable onPress={() => router.push('/auth/forgot-password')} disabled={loading}>
             <ThemedText style={styles.forgotPassword}>Mot de passe oublié ?</ThemedText>
           </Pressable>
         </View>
 
         {/* Login Button */}
-        <Pressable style={styles.loginButton} onPress={handleLogin}>
-          <ThemedText style={styles.loginButtonText}>Se connecter</ThemedText>
+        <Pressable 
+          style={[styles.loginButton, (!isFormValid || loading) && styles.loginButtonDisabled]} 
+          onPress={handleLogin}
+          disabled={!isFormValid || loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.loginButtonText}>Se connecter</ThemedText>
+          )}
         </Pressable>
 
         {/* Sign Up Link */}
@@ -79,7 +168,7 @@ export default function LoginScreen() {
           <ThemedText style={styles.signUpText}>
             Vous n'avez pas de compte ?{' '}
           </ThemedText>
-          <Pressable onPress={() => router.push('/auth/signup')}>
+          <Pressable onPress={() => router.push('/auth/signup')} disabled={loading}>
             <ThemedText style={styles.signUpLink}>Créer un compte maintenant !</ThemedText>
           </Pressable>
         </View>
@@ -153,6 +242,17 @@ const styles = StyleSheet.create({
     padding: 18,
     fontSize: 16,
     color: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  inputError: {
+    borderColor: '#FF3B30',
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
   },
   forgotPassword: {
     fontSize: 14,
@@ -165,6 +265,10 @@ const styles = StyleSheet.create({
     padding: 18,
     alignItems: 'center',
     marginBottom: 20,
+  },
+  loginButtonDisabled: {
+    backgroundColor: '#3A4A8F',
+    opacity: 0.6,
   },
   loginButtonText: {
     fontSize: 18,
@@ -187,4 +291,3 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-
