@@ -1,9 +1,11 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { moviesApi } from '@/services/api';
+import { Movie } from '@/types/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 interface MenuItem {
   id: string;
@@ -50,6 +52,8 @@ const dualMenus: MenuItem[] = [
 export default function BuffetScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const [movie, setMovie] = useState<Movie | null>(null);
+  const [loading, setLoading] = useState(true);
   
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({
     large: 1,
@@ -57,6 +61,24 @@ export default function BuffetScreen() {
     small: 0,
     double: 0,
   });
+
+  useEffect(() => {
+    const loadMovie = async () => {
+      try {
+        setLoading(true);
+        const movieData = await moviesApi.getMovieById(Number(id));
+        setMovie(movieData);
+      } catch (error) {
+        console.error('Error loading movie:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      loadMovie();
+    }
+  }, [id]);
 
   const handleIncrement = (itemId: string) => {
     setQuantities(prev => ({
@@ -73,6 +95,16 @@ export default function BuffetScreen() {
   };
 
   const totalItems = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
+
+  if (loading || !movie) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#5B7FFF" />
+        </View>
+      </ThemedView>
+    );
+  }
 
   const renderMenuItem = (item: MenuItem) => {
     const quantity = quantities[item.id] || 0;
@@ -175,6 +207,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1C1C1E',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     paddingTop: 60,

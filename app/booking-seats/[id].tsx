@@ -4,13 +4,17 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TicketCounter } from '@/components/ticket-counter';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { moviesApi } from '@/services/api';
+import { Movie } from '@/types/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function BookingSeatsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const [movie, setMovie] = useState<Movie | null>(null);
+  const [loading, setLoading] = useState(true);
   
   const [adultCount, setAdultCount] = useState(2);
   const [childCount, setChildCount] = useState(0);
@@ -21,6 +25,25 @@ export default function BookingSeatsScreen() {
   const pricePerTicket = 5000; // 5000f par ticket
   const totalAmount = totalTickets * pricePerTicket;
   
+  // Charger les données du film
+  useEffect(() => {
+    const loadMovie = async () => {
+      try {
+        setLoading(true);
+        const movieData = await moviesApi.getMovieById(Number(id));
+        setMovie(movieData);
+      } catch (error) {
+        console.error('Error loading movie:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      loadMovie();
+    }
+  }, [id]);
+
   // Générer les sièges initiaux
   useEffect(() => {
     const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
@@ -135,6 +158,16 @@ export default function BookingSeatsScreen() {
   };
 
   const canProceed = selectedSeats.length === totalTickets && totalTickets > 0;
+
+  if (loading || !movie) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#5B7FFF" />
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -268,6 +301,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1C1C1E',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     paddingTop: 60,

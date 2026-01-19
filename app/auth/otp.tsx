@@ -1,13 +1,19 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useRouter } from 'expo-router';
+import { useAuth } from '@/contexts/auth-context';
+import { authService } from '@/services/auth';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 export default function OTPScreen() {
   const router = useRouter();
+  const { login } = useAuth();
+  const { email } = useLocalSearchParams<{ email: string }>();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const inputRefs = useRef<Array<TextInput | null>>([]);
 
   const handleOtpChange = (value: string, index: number) => {
@@ -31,19 +37,90 @@ export default function OTPScreen() {
     }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const otpCode = otp.join('');
-    // TODO: Implement OTP verification logic
-    console.log('Verify OTP:', otpCode);
-    router.push('/(tabs)');
+    
+    if (otpCode.length !== 6) {
+      Alert.alert('Erreur', 'Veuillez entrer le code à 6 chiffres');
+      return;
+    }
+
+    if (!email) {
+      Alert.alert('Erreur', 'Email manquant');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const response = await authService.verifyOTP({
+        email: email,
+        otp_code: otpCode,
+      });
+
+      if (response.token && response.customer) {
+        // Connexion automatique après vérification
+        await login(response.token, response.customer);
+        Alert.alert(
+          'Succès',
+          'Votre compte a été vérifié avec succès !',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.replace('/(tabs)'),
+            },
+          ]
+        );
+      }
+    } catch (error: any) {
+      console.error('OTP verification error:', error);
+      
+      if (error?.errors?.otp_code) {
+        Alert.alert('Erreur', error.errors.otp_code[0]);
+      } else if (error?.message) {
+        Alert.alert('Erreur', error.message);
+      } else {
+        Alert.alert('Erreur', 'Une erreur est survenue lors de la vérification');
+      }
+      
+      // Réinitialiser le code OTP
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleResend = () => {
-    // TODO: Implement resend OTP logic
-    console.log('Resend OTP');
-    setOtp(['', '', '', '', '', '']);
-    inputRefs.current[0]?.focus();
+  const handleResend = async () => {
+    if (!email) {
+      Alert.alert('Erreur', 'Email manquant');
+      return;
+    }
+
+    try {
+      setResending(true);
+
+      const response = await authService.resendOTP({
+        email: email,
+      });
+
+      Alert.alert('Succès', response.message || 'Un nouveau code a été envoyé');
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } catch (error: any) {
+      console.error('Resend OTP error:', error);
+      
+      if (error?.message) {
+        Alert.alert('Erreur', error.message);
+      } else {
+        Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi du code');
+      }
+    } finally {
+      setResending(false);
+    }
   };
+
+  const isOtpComplete = otp.join('').length === 6;
 
   return (
     <ThemedView style={styles.container}>
@@ -58,7 +135,7 @@ export default function OTPScreen() {
           keyboardShouldPersistTaps="handled"
         >
         {/* Back Button */}
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
+        <Pressable style={styles.backButton} onPress={() => router.back()} disabled={loading}>
           <IconSymbol name="chevron.left" size={24} color="#FFFFFF" />
         </Pressable>
 
@@ -80,9 +157,9 @@ export default function OTPScreen() {
 
         {/* Instructions */}
         <View style={styles.instructionsContainer}>
-          <ThemedText style={styles.instructionsTitle}>Verification Code</ThemedText>
+          <ThemedText style={styles.instructionsTitle}>Code de Vérification</ThemedText>
           <ThemedText style={styles.instructionsText}>
-            Please enter the 6-digit code sent to your email
+            Veuillez entrer le code à 6 chiffres envoyé à {email}
           </ThemedText>
         </View>
 
@@ -101,25 +178,34 @@ export default function OTPScreen() {
               keyboardType="number-pad"
               maxLength={1}
               selectTextOnFocus
+              editable={!loading}
             />
           ))}
         </View>
 
         {/* Resend */}
         <View style={styles.resendContainer}>
-          <ThemedText style={styles.resendText}>Didn't receive the code? </ThemedText>
-          <Pressable onPress={handleResend}>
-            <ThemedText style={styles.resendLink}>Resend</ThemedText>
+          <ThemedText style={styles.resendText}>Vous n'avez pas reçu le code ? </ThemedText>
+          <Pressable onPress={handleResend} disabled={resending || loading}>
+            {resending ? (
+              <ActivityIndicator size="small" color="#5B7FFF" />
+            ) : (
+              <ThemedText style={styles.resendLink}>Renvoyer</ThemedText>
+            )}
           </Pressable>
         </View>
 
         {/* Verify Button */}
         <Pressable
-          style={[styles.verifyButton, otp.join('').length < 6 && styles.verifyButtonDisabled]}
+          style={[styles.verifyButton, (!isOtpComplete || loading) && styles.verifyButtonDisabled]}
           onPress={handleVerify}
-          disabled={otp.join('').length < 6}
+          disabled={!isOtpComplete || loading}
         >
-          <ThemedText style={styles.verifyButtonText}>Verify</ThemedText>
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.verifyButtonText}>Vérifier</ThemedText>
+          )}
         </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -204,6 +290,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8E8E93',
     textAlign: 'center',
+    paddingHorizontal: 20,
   },
   otpContainer: {
     flexDirection: 'row',
@@ -232,6 +319,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 40,
+    gap: 4,
   },
   resendText: {
     fontSize: 14,
@@ -249,7 +337,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   verifyButtonDisabled: {
-    backgroundColor: '#3A3A3C',
+    backgroundColor: '#3A4A8F',
+    opacity: 0.6,
   },
   verifyButtonText: {
     fontSize: 18,
@@ -257,4 +346,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

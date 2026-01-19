@@ -1,8 +1,35 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { ScrollView, StyleSheet } from 'react-native';
+import { useAuth } from '@/contexts/auth-context';
+import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function FavoritesScreen() {
+  const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace('/auth/login');
+    }
+  }, [isAuthenticated, isLoading]);
+
+  if (isLoading) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#5B7FFF" />
+          <ThemedText style={styles.loadingText}>Vérification...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView style={styles.scrollView}>
@@ -23,6 +50,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1C1C1E',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#8E8E93',
   },
   scrollView: {
     flex: 1,
@@ -48,4 +85,3 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
 });
-
