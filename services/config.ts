@@ -10,10 +10,10 @@
 export const API_CONFIG = {
   // Option 1 : API locale avec IP de VOTRE PC (pas de l'iPhone !)
   // L'iPhone (192.168.1.102) doit se connecter au PC (192.168.1.138)
-  BASE_URL: 'http://192.168.1.138/api/v1',
+  // BASE_URL: 'http://192.168.1.138/api/v1',
   
   // Option 2 : API de production (Recommandé pour les tests)
-  // BASE_URL: 'https://cineplex-main-fkwtm3.laravel.cloud/api/v1',
+  BASE_URL: 'https://cineplex-main-fkwtm3.laravel.cloud/api/v1',
   
   // Option 3 : Android Emulator uniquement (10.0.2.2 = localhost de l'hôte)
   // BASE_URL: 'http://10.0.2.2/api/v1',
