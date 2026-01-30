@@ -2,18 +2,22 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { moviesApi } from '@/services/api';
+import { authService } from '@/services/auth';
+import { addFavorite, getFavorites, removeFavorite } from '@/services/favoritesService';
 import { Movie } from '@/types/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function MovieDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteId, setFavoriteId] = useState<number | null>(null);
   const [movie, setMovie] = useState<Movie | null>(null);
   const [loading, setLoading] = useState(true);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
 
   useEffect(() => {
     const loadMovie = async () => {
@@ -33,6 +37,34 @@ export default function MovieDetailsScreen() {
     }
   }, [id]);
 
+  // Vérifier si le film est dans les favoris
+  useEffect(() => {
+    const checkIfFavorite = async () => {
+      try {
+        const token = await authService.getToken();
+        if (!token || !id) return;
+
+        // Récupérer tous les favoris pour trouver l'ID du favori
+        const favorites = await getFavorites(token, 'all');
+        const favorite = favorites.find((fav) => fav.movie_id === Number(id));
+
+        if (favorite) {
+          setIsFavorite(true);
+          setFavoriteId(favorite.id);
+        } else {
+          setIsFavorite(false);
+          setFavoriteId(null);
+        }
+      } catch (error) {
+        console.error('Error checking favorite:', error);
+      }
+    };
+
+    if (id) {
+      checkIfFavorite();
+    }
+  }, [id]);
+
   if (loading || !movie) {
     return (
       <ThemedView style={styles.container}>
@@ -42,6 +74,44 @@ export default function MovieDetailsScreen() {
       </ThemedView>
     );
   }
+
+  const handleToggleFavorite = async () => {
+    try {
+      setFavoriteLoading(true);
+      const token = await authService.getToken();
+      
+      if (!token) {
+        Alert.alert(
+          'Connexion requise',
+          'Vous devez être connecté pour ajouter des favoris',
+          [
+            { text: 'Annuler', style: 'cancel' },
+            { text: 'Se connecter', onPress: () => router.push('/auth/login') },
+          ]
+        );
+        return;
+      }
+
+      if (isFavorite && favoriteId) {
+        // Retirer des favoris
+        await removeFavorite(token, favoriteId);
+        setIsFavorite(false);
+        setFavoriteId(null);
+        Alert.alert('Succès', 'Film retiré des favoris');
+      } else {
+        // Ajouter aux favoris
+        const favorite = await addFavorite(token, Number(id));
+        setIsFavorite(true);
+        setFavoriteId(favorite.id);
+        Alert.alert('Succès', 'Film ajouté aux favoris');
+      }
+    } catch (error: any) {
+      console.error('Error toggling favorite:', error);
+      Alert.alert('Erreur', error.message || 'Une erreur est survenue');
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
 
   const renderStars = (rating: number) => {
     return Array.from({ length: 5 }, (_, index) => (
@@ -90,13 +160,18 @@ export default function MovieDetailsScreen() {
             
             <Pressable 
               style={styles.favoriteButton}
-              onPress={() => setIsFavorite(!isFavorite)}
+              onPress={handleToggleFavorite}
+              disabled={favoriteLoading}
             >
-              <IconSymbol 
-                name={isFavorite ? "heart.fill" : "heart"} 
-                size={24} 
-                color={isFavorite ? "#FF3B30" : "#FFFFFF"} 
-              />
+              {favoriteLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <IconSymbol 
+                  name={isFavorite ? "heart.fill" : "heart"} 
+                  size={24} 
+                  color={isFavorite ? "#FF3B30" : "#FFFFFF"} 
+                />
+              )}
             </Pressable>
           </View>
 
@@ -182,13 +257,25 @@ export default function MovieDetailsScreen() {
 
       {/* Bouton Buy Ticket */}
       <View style={styles.bottomContainer}>
-        <Pressable 
-          style={styles.buyButton}
-          onPress={() => router.push(`/booking/${movie.id}`)}
-        >
-          <ThemedText style={styles.buyButtonText}>Réserver maintenant</ThemedText>
-          <IconSymbol name="chevron.right" size={24} color="#FFFFFF" />
-        </Pressable>
+        {movie.status === 'coming_soon' ? (
+          <View style={[styles.buyButton, styles.buyButtonDisabled]}>
+            <IconSymbol name="calendar" size={24} color="#8E8E93" />
+            <ThemedText style={styles.buyButtonTextDisabled}>Bientôt disponible</ThemedText>
+          </View>
+        ) : movie.status === 'archived' ? (
+          <View style={[styles.buyButton, styles.buyButtonDisabled]}>
+            <IconSymbol name="archivebox" size={24} color="#8E8E93" />
+            <ThemedText style={styles.buyButtonTextDisabled}>Film archivé</ThemedText>
+          </View>
+        ) : (
+          <Pressable 
+            style={styles.buyButton}
+            onPress={() => router.push(`/booking/${movie.id}`)}
+          >
+            <ThemedText style={styles.buyButtonText}>Réserver maintenant</ThemedText>
+            <IconSymbol name="chevron.right" size={24} color="#FFFFFF" />
+          </Pressable>
+        )}
       </View>
     </ThemedView>
   );
@@ -423,10 +510,21 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
+  buyButtonDisabled: {
+    backgroundColor: '#2C2C2E',
+    shadowColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#3C3C3E',
+  },
   buyButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  buyButtonTextDisabled: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#8E8E93',
   },
 });
 

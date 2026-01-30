@@ -171,20 +171,28 @@ export async function verifyPaymentWithPolling(
   maxAttempts: number = 20,
   intervalMs: number = 3000
 ): Promise<VerifyPaymentResponse> {
+  console.log(`Début du polling: ${maxAttempts} tentatives, intervalle ${intervalMs}ms`);
+  
   for (let i = 0; i < maxAttempts; i++) {
+    console.log(`Tentative ${i + 1}/${maxAttempts} - Vérification du paiement...`);
     const result = await verifyPayment(token, { bill_id: billId });
+    
+    console.log(`Résultat tentative ${i + 1}:`, result.status);
 
     if (result.status === 'completed' || result.status === 'failed') {
+      console.log(`Paiement terminé avec statut: ${result.status}`);
       return result;
     }
 
     // Attendre avant la prochaine tentative (sauf pour la dernière)
     if (i < maxAttempts - 1) {
+      console.log(`Attente de ${intervalMs}ms avant la prochaine tentative...`);
       await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
   }
 
   // Timeout
+  console.log('Timeout: délai de paiement expiré');
   return {
     success: false,
     status: 'failed',

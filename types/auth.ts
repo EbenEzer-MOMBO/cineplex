@@ -6,6 +6,9 @@ export interface Customer {
   phone: string | null;
   created_at: string;
   updated_at: string;
+  bookings_count?: number;
+  favorites_count?: number;
+  total_spent?: string;
 }
 
 export interface AuthResponse {

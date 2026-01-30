@@ -9,6 +9,7 @@ interface AuthContextType {
   login: (token: string, customer: Customer) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  setCustomer: (customer: Customer) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         refreshProfile,
+        setCustomer,
       }}
     >
       {children}

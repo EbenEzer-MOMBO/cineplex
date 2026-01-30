@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import { moviesApi } from '@/services/api';
+import { createBooking, getBookingById } from '@/services/bookingService';
 import {
   formatPhoneNumber,
   initiatePayment,
@@ -22,7 +23,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } fro
 type PaymentMethod = 'airtel' | 'moov' | null;
 
 export default function BookingPaymentScreen() {
-  const { id, sessionId, participants, seats: seatIds } = useLocalSearchParams();
+  const { id, sessionId, participants, seats: seatIds, bookingId: existingBookingId } = useLocalSearchParams();
   const router = useRouter();
   const { customer } = useAuth();
   
@@ -35,10 +36,19 @@ export default function BookingPaymentScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'initiating' | 'waiting' | 'success' | 'error'>('initiating');
-  const [bookingId, setBookingId] = useState<number | null>(null);
+  const [bookingId, setBookingId] = useState<number | null>(existingBookingId ? Number(existingBookingId) : null);
   
-  const participantCount = participants ? parseInt(participants as string) : 0;
-  const selectedSeatIds = seatIds ? (seatIds as string).split(',').map(Number) : [];
+  // États pour les données de réservation (mode retry)
+  const [retryParticipantCount, setRetryParticipantCount] = useState<number>(0);
+  const [retrySelectedSeatIds, setRetrySelectedSeatIds] = useState<number[]>([]);
+  const [retryTotalAmount, setRetryTotalAmount] = useState<number>(0);
+  
+  // Mode: 'new' pour nouvelle réservation, 'retry' pour reprise de paiement
+  const isRetryMode = !!existingBookingId;
+  
+  // Calcul des valeurs selon le mode
+  const participantCount = isRetryMode ? retryParticipantCount : (participants ? parseInt(participants as string) : 0);
+  const selectedSeatIds = isRetryMode ? retrySelectedSeatIds : (seatIds ? (seatIds as string).split(',').map(Number) : []);
   const selectedSeats = seats.filter(s => selectedSeatIds.includes(s.id));
   
   const isPhoneValid = phoneNumber.length === 9 && (
@@ -49,26 +59,55 @@ export default function BookingPaymentScreen() {
   const canProceed = selectedMethod && isPhoneValid;
   
   const pricePerTicket = session?.price_per_ticket ? parseFloat(session.price_per_ticket.toString()) : 5000;
-  const totalAmount = participantCount * pricePerTicket;
+  const totalAmount = isRetryMode ? retryTotalAmount : (participantCount * pricePerTicket);
   
   // Charger les données
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        
-        // Charger le film
-        const movieData = await moviesApi.getMovieById(Number(id));
-        setMovie(movieData);
-        
-        // Charger la séance
-        if (sessionId) {
-          const sessionData = await getSessionById(Number(sessionId));
-          setSession(sessionData.data);
+        const { authService } = await import('@/services/auth');
+        const token = await authService.getToken();
+
+        if (!token) {
+          router.replace('/auth/login');
+          return;
+        }
+
+        if (isRetryMode && existingBookingId) {
+          // Mode reprise : charger les données depuis la réservation existante
+          const booking = await getBookingById(token, Number(existingBookingId));
           
-          // Charger les sièges
-          const seatsData = await getSessionSeats(Number(sessionId));
-          setSeats(seatsData.data);
+          setMovie(booking.movie as any);
+          setSession(booking.movie_session as any);
+          setSeats(booking.seats as any);
+          
+          // Remplir les données de réservation
+          setRetryParticipantCount(booking.seats.length);
+          setRetrySelectedSeatIds(booking.seats.map(seat => seat.id));
+          setRetryTotalAmount(booking.total_amount);
+          
+          // Pré-remplir le numéro de téléphone et la méthode de paiement
+          const phone = booking.payment_phone;
+          setPhoneNumber(phone);
+          
+          if (booking.payment_method === 'airtel_money') {
+            setSelectedMethod('airtel');
+          } else if (booking.payment_method === 'moov_money') {
+            setSelectedMethod('moov');
+          }
+        } else {
+          // Mode nouvelle réservation : charger les données normalement
+          const movieData = await moviesApi.getMovieById(Number(id));
+          setMovie(movieData);
+          
+          if (sessionId) {
+            const sessionData = await getSessionById(Number(sessionId));
+            setSession(sessionData.data);
+            
+            const seatsData = await getSessionSeats(Number(sessionId));
+            setSeats(seatsData.data);
+          }
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -78,10 +117,10 @@ export default function BookingPaymentScreen() {
       }
     };
 
-    if (id && sessionId) {
+    if ((id && sessionId) || (isRetryMode && existingBookingId)) {
       loadData();
     }
-  }, [id, sessionId]);
+  }, [id, sessionId, isRetryMode, existingBookingId]);
 
   const handleMethodSelect = (method: PaymentMethod) => {
     setSelectedMethod(method);
@@ -111,54 +150,126 @@ export default function BookingPaymentScreen() {
         return;
       }
 
-      // TODO: Créer d'abord la réservation via l'API
-      // Pour l'instant, on simule un booking_id
-      const mockBookingId = 1;
-      setBookingId(mockBookingId);
-
       // Convertir le type de paiement
       const paymentMethod = selectedMethod === 'airtel' ? 'airtel_money' : 'moov_money';
-      
-      // Le numéro reste au format local (ex: 062648538 ou 074694721)
       const msisdn = formatPhoneNumber(phoneNumber);
 
-      console.log('Paiement:', {
-        booking_id: mockBookingId,
-        payment_method: paymentMethod,
-        msisdn: msisdn,
-      });
+      if (isRetryMode && bookingId) {
+        // MODE REPRISE : Uniquement initier le paiement pour une réservation existante
+        console.log('Reprise du paiement pour la réservation:', bookingId);
 
-      // Initier le paiement
-      const response = await initiatePayment(token, {
-        booking_id: mockBookingId,
-        payment_method: paymentMethod,
-        msisdn: msisdn,
-      });
+        const response = await initiatePayment(token, {
+          booking_id: bookingId,
+          payment_method: paymentMethod,
+          msisdn: msisdn,
+        });
 
-      if (response.success && response.bill_id) {
-        // Passer en mode "waiting" - le modal gère déjà ça automatiquement
-        // Commencer la vérification du paiement (60 secondes, toutes les 3 secondes)
-        const verifyResult = await verifyPaymentWithPolling(token, response.bill_id, 20, 3000);
+        if (response.success && response.bill_id) {
+          // Passer en mode "waiting"
+          setPaymentStatus('waiting');
+          
+          console.log('Début de la vérification du paiement avec bill_id:', response.bill_id);
+          
+          // Vérifier le paiement (60 secondes, toutes les 3 secondes)
+          const verifyResult = await verifyPaymentWithPolling(token, response.bill_id, 20, 3000);
 
-        if (verifyResult.status === 'completed') {
+          console.log('Résultat final de la vérification:', verifyResult);
+
+          if (verifyResult.status === 'completed') {
+            // Paiement réussi
+            console.log('Paiement réussi, redirection...');
+            setPaymentStatus('success');
+            handlePaymentSuccess();
+          } else {
+            // Paiement échoué
+            console.log('Paiement échoué:', verifyResult.message);
+            setPaymentStatus('error');
+            handlePaymentError(verifyResult.message);
+          }
+        } else {
+          setPaymentStatus('error');
+          setShowPaymentModal(false);
+          Alert.alert('Erreur', response.message || 'Impossible d\'initier le paiement');
+        }
+      } else {
+        // MODE NOUVELLE RÉSERVATION : Créer la réservation (paiement automatique)
+        if (!session) return;
+
+        console.log('Création de la réservation:', {
+          movie_session_id: session.id,
+          seat_ids: selectedSeatIds,
+          payment_method: paymentMethod,
+          payment_phone: phoneNumber,
+        });
+
+        const booking = await createBooking(token, {
+          movie_session_id: session.id,
+          seat_ids: selectedSeatIds,
+          payment_method: paymentMethod,
+          payment_phone: phoneNumber,
+        });
+
+        console.log('Réservation créée:', booking);
+        setBookingId(booking.id);
+
+        // Vérifier si le paiement a été initié avec succès
+        if (booking.payment_status === 'pending') {
+          // Paiement en attente, rediriger vers mes réservations
+          setPaymentStatus('error');
+          setShowPaymentModal(false);
+          Alert.alert(
+            'Réservation créée',
+            'Votre réservation a été créée mais le paiement est en attente. Vous pouvez le finaliser depuis "Mes réservations".',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.push('/bookings'),
+              },
+            ]
+          );
+        } else if (booking.payment_status === 'completed') {
           // Paiement réussi
           setPaymentStatus('success');
           handlePaymentSuccess();
         } else {
           // Paiement échoué
           setPaymentStatus('error');
-          handlePaymentError(verifyResult.message);
+          setShowPaymentModal(false);
+          Alert.alert(
+            'Paiement échoué',
+            'Votre réservation a été créée mais le paiement a échoué. Vous pouvez réessayer depuis "Mes réservations".',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.push('/bookings'),
+              },
+            ]
+          );
         }
-      } else {
-        setPaymentStatus('error');
-        setShowPaymentModal(false);
-        Alert.alert('Erreur', response.message || 'Impossible d\'initier le paiement');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Payment error:', error);
       setPaymentStatus('error');
       setShowPaymentModal(false);
-      Alert.alert('Erreur', 'Une erreur est survenue lors du paiement');
+      
+      if (isRetryMode) {
+        Alert.alert('Erreur', error.message || 'Une erreur est survenue lors du paiement');
+      } else {
+        Alert.alert(
+          'Erreur',
+          error.message || 'Une erreur est survenue lors de la réservation',
+          [
+            {
+              text: 'Mes réservations',
+              onPress: () => router.push('/bookings'),
+            },
+            {
+              text: 'Réessayer',
+              style: 'cancel',
+            },
+          ]
+        );
+      }
     }
   };
 
@@ -205,9 +316,13 @@ export default function BookingPaymentScreen() {
       >
         {/* Title */}
         <View style={styles.titleSection}>
-          <ThemedText style={styles.title}>Mode de Paiement</ThemedText>
+          <ThemedText style={styles.title}>
+            {isRetryMode ? 'Finaliser le Paiement' : 'Mode de Paiement'}
+          </ThemedText>
           <ThemedText style={styles.subtitle}>
-            Sélectionnez votre mode de paiement mobile
+            {isRetryMode
+              ? 'Complétez le paiement de votre réservation'
+              : 'Sélectionnez votre mode de paiement mobile'}
           </ThemedText>
         </View>
 
@@ -262,7 +377,7 @@ export default function BookingPaymentScreen() {
           <View style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Sièges:</ThemedText>
             <ThemedText style={styles.summaryValue} numberOfLines={2}>
-              {selectedSeats.map(s => s.seat_code).join(', ')}
+              {selectedSeats.map(s => s.seat_code || `${s.row}${s.number}`).join(', ')}
             </ThemedText>
           </View>
           

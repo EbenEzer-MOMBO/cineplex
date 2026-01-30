@@ -7,8 +7,10 @@ import {
     VerifyOTPRequest,
 } from '@/types/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_CONFIG } from './config';
 
-const API_BASE_URL = 'https://cineplex-main-fkwtm3.laravel.cloud/api/v1';
+const API_BASE_URL = API_CONFIG.BASE_URL;
+
 const TOKEN_KEY = '@cineplex_token';
 const CUSTOMER_KEY = '@cineplex_customer';
 

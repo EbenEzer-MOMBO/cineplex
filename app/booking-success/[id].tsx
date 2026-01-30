@@ -2,12 +2,71 @@ import { Stepper } from '@/components/stepper';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { authService } from '@/services/auth';
+import { Booking, getBookingById } from '@/services/bookingService';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function BookingSuccessScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, bookingId } = useLocalSearchParams();
   const router = useRouter();
+  const [booking, setBooking] = useState<Booking | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadBooking = async () => {
+      try {
+        setLoading(true);
+        const token = await authService.getToken();
+
+        if (!token) {
+          router.replace('/auth/login');
+          return;
+        }
+
+        if (!bookingId) {
+          Alert.alert('Erreur', 'ID de réservation manquant');
+          router.back();
+          return;
+        }
+
+        const bookingData = await getBookingById(token, Number(bookingId));
+        setBooking(bookingData);
+      } catch (error: any) {
+        console.error('Error loading booking:', error);
+        Alert.alert('Erreur', error.message || 'Impossible de charger la réservation');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadBooking();
+  }, [bookingId]);
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (timeString: string) => {
+    return timeString.substring(0, 5); // HH:MM
+  };
+
+  if (loading || !booking) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#5B7FFF" />
+          <ThemedText style={styles.loadingText}>Chargement...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -55,36 +114,74 @@ export default function BookingSuccessScreen() {
           
           <View style={styles.detailRow}>
             <ThemedText style={styles.detailLabel}>Film</ThemedText>
-            <ThemedText style={styles.detailValue}>Kung Fu Panda 4</ThemedText>
+            <ThemedText style={styles.detailValue}>{booking.movie.title}</ThemedText>
           </View>
           
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Séance</ThemedText>
-            <ThemedText style={styles.detailValue}>20h30 - 22h00</ThemedText>
+            <ThemedText style={styles.detailLabel}>Date</ThemedText>
+            <ThemedText style={styles.detailValue}>
+              {formatDate(booking.movie_session.session_date)}
+            </ThemedText>
+          </View>
+          
+          <View style={styles.detailRow}>
+            <ThemedText style={styles.detailLabel}>Horaire</ThemedText>
+            <ThemedText style={styles.detailValue}>
+              {formatTime(booking.movie_session.start_time)} - {formatTime(booking.movie_session.end_time)}
+            </ThemedText>
+          </View>
+
+          <View style={styles.detailRow}>
+            <ThemedText style={styles.detailLabel}>Salle</ThemedText>
+            <ThemedText style={styles.detailValue}>{booking.movie_session.hall}</ThemedText>
           </View>
           
           <View style={styles.detailRow}>
             <ThemedText style={styles.detailLabel}>Sièges</ThemedText>
-            <ThemedText style={styles.detailValue}>C3, C4</ThemedText>
+            <ThemedText style={styles.detailValue}>
+              {booking.seats.map(s => `${s.row}${s.number}`).join(', ')}
+            </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
             <ThemedText style={styles.detailLabel}>Tickets</ThemedText>
-            <ThemedText style={styles.detailValue}>2 Adulte</ThemedText>
+            <ThemedText style={styles.detailValue}>
+              {booking.seats.length} {booking.seats.length > 1 ? 'Tickets' : 'Ticket'}
+            </ThemedText>
+          </View>
+
+          {booking.buffet_items && booking.buffet_items.length > 0 && (
+            <View style={styles.detailRow}>
+              <ThemedText style={styles.detailLabel}>Buffet</ThemedText>
+              <View style={styles.buffetList}>
+                {booking.buffet_items.map((item, index) => (
+                  <ThemedText key={index} style={styles.detailValue}>
+                    {item.quantity}x {item.name}
+                  </ThemedText>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <View style={styles.detailRow}>
+            <ThemedText style={styles.detailLabel}>Paiement</ThemedText>
+            <ThemedText style={styles.detailValue}>{booking.payment_method_label}</ThemedText>
           </View>
           
           <View style={styles.divider} />
           
           <View style={styles.detailRow}>
             <ThemedText style={styles.totalLabel}>Total Payé</ThemedText>
-            <ThemedText style={styles.totalValue}>10 000f</ThemedText>
+            <ThemedText style={styles.totalValue}>
+              {booking.total_amount.toLocaleString('fr-FR')} F
+            </ThemedText>
           </View>
         </View>
 
         {/* Confirmation Number */}
         <View style={styles.confirmationCard}>
           <ThemedText style={styles.confirmationLabel}>Numéro de Confirmation</ThemedText>
-          <ThemedText style={styles.confirmationNumber}>CPX-{Date.now().toString().slice(-8)}</ThemedText>
+          <ThemedText style={styles.confirmationNumber}>{booking.booking_number}</ThemedText>
         </View>
       </ScrollView>
 
@@ -93,9 +190,7 @@ export default function BookingSuccessScreen() {
         <Pressable 
           style={styles.primaryButton}
           onPress={() => {
-            // TODO: Navigate to tickets library
-            console.log('Navigate to tickets');
-            router.push('/(tabs)');
+            router.push('/bookings');
           }}
         >
           <IconSymbol name="ticket.fill" size={24} color="#FFFFFF" />
@@ -293,6 +388,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#5B7FFF',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#8E8E93',
+  },
+  buffetList: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
 });
 
