@@ -145,9 +145,9 @@ export default function LoginScreen() {
             {errors.password && <ThemedText style={styles.errorText}>{errors.password}</ThemedText>}
           </View>
 
-          <Pressable onPress={() => router.push('/auth/forgot-password')} disabled={loading}>
+          {/* <Pressable onPress={() => router.push('/auth/forgot-password')} disabled={loading}>
             <ThemedText style={styles.forgotPassword}>Mot de passe oublié ?</ThemedText>
-          </Pressable>
+          </Pressable> */}
         </View>
 
         {/* Login Button */}
