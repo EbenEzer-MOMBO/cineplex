@@ -42,6 +42,7 @@ export default function ProfileScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
 
+  // Redirection immédiate si non authentifié
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.replace('/auth/login');
@@ -49,10 +50,11 @@ export default function ProfileScreen() {
   }, [isAuthenticated, isLoading]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    // Ne charger que si authentifié ET non en cours de chargement
+    if (!isLoading && isAuthenticated) {
       loadProfile();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isLoading]);
 
   const loadProfile = async () => {
     try {

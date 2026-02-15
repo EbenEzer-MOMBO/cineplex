@@ -14,11 +14,10 @@
     "android": {
       "package": "com.cineplex.app",
       "versionCode": 1,
+      "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/images/icon.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false

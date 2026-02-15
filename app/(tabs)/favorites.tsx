@@ -31,6 +31,7 @@ export default function FavoritesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FavoriteStatus>('all');
 
+  // Redirection immédiate si non authentifié
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.replace('/auth/login');
@@ -38,10 +39,14 @@ export default function FavoritesScreen() {
   }, [isAuthenticated, isLoading]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    // Ne charger que si authentifié ET non en cours de chargement
+    if (!isLoading && isAuthenticated) {
       loadFavorites();
+    } else if (!isLoading && !isAuthenticated) {
+      // Arrêter le chargement si pas authentifié
+      setLoading(false);
     }
-  }, [isAuthenticated, selectedFilter]);
+  }, [isAuthenticated, isLoading, selectedFilter]);
 
   const loadFavorites = async () => {
     try {
