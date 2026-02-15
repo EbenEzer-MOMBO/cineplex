@@ -67,6 +67,7 @@ export interface Booking {
   payment_method: 'airtel_money' | 'moov_money';
   payment_method_label: string;
   payment_phone: string;
+  bill_id?: string; // ID de la facture pour le suivi du paiement
   status: 'pending' | 'confirmed' | 'cancelled';
   status_label: string;
   created_at: string;
@@ -76,6 +77,12 @@ export interface Booking {
 export interface CreateBookingResponse {
   message: string;
   data: Booking;
+  payment?: {
+    bill_id: string;
+    reference: string;
+    status: string;
+    message: string;
+  };
 }
 
 export interface BookingsListResponse {
@@ -101,13 +108,13 @@ export interface CancelBookingResponse {
 }
 
 /**
- * Crée une nouvelle réservation (sans initier le paiement)
- * Le paiement sera initié séparément avec l'ID de la réservation
+ * Crée une nouvelle réservation et initie le paiement
+ * Retourne les données de réservation ET les infos de paiement (bill_id)
  */
 export async function createBooking(
   token: string,
   data: CreateBookingRequest
-): Promise<Booking> {
+): Promise<CreateBookingResponse> {
   try {
     const response = await fetch(buildApiUrl('/bookings'), {
       method: 'POST',
@@ -130,7 +137,7 @@ export async function createBooking(
       throw new Error(result.message || 'Erreur lors de la création de la réservation');
     }
 
-    return result.data;
+    return result;
   } catch (error: any) {
     if (error.message) {
       throw error;

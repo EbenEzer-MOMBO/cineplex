@@ -37,6 +37,7 @@ export default function BookingPaymentScreen() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'initiating' | 'waiting' | 'success' | 'error'>('initiating');
   const [bookingId, setBookingId] = useState<number | null>(existingBookingId ? Number(existingBookingId) : null);
+  const [isProcessing, setIsProcessing] = useState(false); // État pour l'animation du bouton
   
   // États pour les données de réservation (mode retry)
   const [retryParticipantCount, setRetryParticipantCount] = useState<number>(0);
@@ -135,9 +136,7 @@ export default function BookingPaymentScreen() {
   const handlePayment = async () => {
     if (!canProceed || !customer || !selectedMethod) return;
 
-    // Afficher le modal immédiatement en mode "initiating"
-    setPaymentStatus('initiating');
-    setShowPaymentModal(true);
+    setIsProcessing(true); // Activer l'animation du bouton
 
     try {
       // Récupérer le token
@@ -145,7 +144,7 @@ export default function BookingPaymentScreen() {
       const token = await authService.getToken();
       
       if (!token) {
-        setShowPaymentModal(false);
+        setIsProcessing(false);
         Alert.alert('Erreur', 'Vous devez être connecté pour effectuer un paiement');
         return;
       }
@@ -165,8 +164,16 @@ export default function BookingPaymentScreen() {
         });
 
         if (response.success && response.bill_id) {
-          // Passer en mode "waiting"
+          // Attendre 5 secondes pour laisser le temps au système de paiement de s'initialiser
+          console.log('Attente de 5 secondes avant d\'afficher le modal...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          
+          // Désactiver l'animation du bouton
+          setIsProcessing(false);
+          
+          // Afficher le modal en mode "waiting"
           setPaymentStatus('waiting');
+          setShowPaymentModal(true);
           
           console.log('Début de la vérification du paiement avec bill_id:', response.bill_id);
           
@@ -187,8 +194,7 @@ export default function BookingPaymentScreen() {
             handlePaymentError(verifyResult.message);
           }
         } else {
-          setPaymentStatus('error');
-          setShowPaymentModal(false);
+          setIsProcessing(false);
           Alert.alert('Erreur', response.message || 'Impossible d\'initier le paiement');
         }
       } else {
@@ -202,46 +208,136 @@ export default function BookingPaymentScreen() {
           payment_phone: phoneNumber,
         });
 
-        const booking = await createBooking(token, {
+        const bookingResponse = await createBooking(token, {
           movie_session_id: session.id,
           seat_ids: selectedSeatIds,
           payment_method: paymentMethod,
           payment_phone: phoneNumber,
         });
 
-        console.log('Réservation créée:', booking);
+        console.log('Réservation créée:', bookingResponse);
+        const booking = bookingResponse.data;
+        const billId = bookingResponse.payment?.bill_id;
+        
         setBookingId(booking.id);
 
         // Vérifier si le paiement a été initié avec succès
         if (booking.payment_status === 'pending') {
-          // Paiement en attente, rediriger vers mes réservations
-          setPaymentStatus('error');
-          setShowPaymentModal(false);
-          Alert.alert(
-            'Réservation créée',
-            'Votre réservation a été créée mais le paiement est en attente. Vous pouvez le finaliser depuis "Mes réservations".',
-            [
-              {
-                text: 'OK',
-                onPress: () => router.push('/bookings'),
-              },
-            ]
-          );
+          // Paiement en attente - Attendre 5 secondes puis vérifier le statut
+          console.log('Attente de 5 secondes avant d\'afficher le modal...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          
+          // Désactiver l'animation du bouton
+          setIsProcessing(false);
+          
+          // Afficher le modal en mode "waiting"
+          setPaymentStatus('waiting');
+          setShowPaymentModal(true);
+          
+          if (billId) {
+            // Si on a un bill_id, utiliser le polling normal avec bill_id
+            console.log('Début de la vérification du paiement avec bill_id:', billId);
+            const verifyResult = await verifyPaymentWithPolling(token, billId, 20, 3000);
+
+            console.log('Résultat final de la vérification:', verifyResult);
+
+            if (verifyResult.status === 'completed') {
+              console.log('Paiement réussi, redirection...');
+              setPaymentStatus('success');
+              handlePaymentSuccess();
+            } else {
+              console.log('Paiement échoué:', verifyResult.message);
+              setPaymentStatus('error');
+              setShowPaymentModal(false);
+              Alert.alert(
+                'Paiement en attente',
+                'Votre réservation a été créée. Si vous avez validé le paiement, il sera traité sous peu. Sinon, vous pouvez réessayer depuis "Mes réservations".',
+                [
+                  {
+                    text: 'Mes réservations',
+                    onPress: () => router.push('/bookings'),
+                  },
+                  {
+                    text: 'OK',
+                    style: 'cancel',
+                  },
+                ]
+              );
+            }
+          } else {
+            // Pas de bill_id - Polling en vérifiant le statut de la réservation directement
+            console.log('Pas de bill_id - Vérification via le statut de la réservation');
+            const maxAttempts = 20;
+            const intervalMs = 3000;
+            let paymentCompleted = false;
+
+            for (let i = 0; i < maxAttempts; i++) {
+              console.log(`Tentative ${i + 1}/${maxAttempts} - Vérification du statut de la réservation...`);
+              
+              try {
+                const updatedBooking = await getBookingById(token, booking.id);
+                console.log(`Statut paiement tentative ${i + 1}:`, updatedBooking.payment_status);
+
+                if (updatedBooking.payment_status === 'completed') {
+                  console.log('Paiement confirmé!');
+                  paymentCompleted = true;
+                  break;
+                } else if (updatedBooking.payment_status === 'failed') {
+                  console.log('Paiement échoué');
+                  break;
+                }
+              } catch (error) {
+                console.error(`Erreur lors de la vérification (tentative ${i + 1}):`, error);
+              }
+
+              if (i < maxAttempts - 1) {
+                console.log(`Attente de ${intervalMs}ms avant la prochaine tentative...`);
+                await new Promise(resolve => setTimeout(resolve, intervalMs));
+              }
+            }
+
+            if (paymentCompleted) {
+              setPaymentStatus('success');
+              handlePaymentSuccess();
+            } else {
+              setPaymentStatus('error');
+              setShowPaymentModal(false);
+              Alert.alert(
+                'Paiement en attente',
+                'Votre réservation a été créée. Si vous avez validé le paiement, il sera traité sous peu. Sinon, vous pouvez réessayer depuis "Mes réservations".',
+                [
+                  {
+                    text: 'Mes réservations',
+                    onPress: () => router.push('/bookings'),
+                  },
+                  {
+                    text: 'OK',
+                    style: 'cancel',
+                  },
+                ]
+              );
+            }
+          }
         } else if (booking.payment_status === 'completed') {
-          // Paiement réussi
+          // Paiement déjà réussi (cas rare)
+          setIsProcessing(false);
           setPaymentStatus('success');
+          setShowPaymentModal(true);
           handlePaymentSuccess();
         } else {
-          // Paiement échoué
-          setPaymentStatus('error');
-          setShowPaymentModal(false);
+          // Erreur lors de la création ou paiement échoué immédiatement
+          setIsProcessing(false);
           Alert.alert(
-            'Paiement échoué',
-            'Votre réservation a été créée mais le paiement a échoué. Vous pouvez réessayer depuis "Mes réservations".',
+            'Erreur de paiement',
+            'Votre réservation a été créée mais le paiement n\'a pas pu être initié. Vous pouvez réessayer depuis "Mes réservations".',
             [
               {
-                text: 'OK',
+                text: 'Mes réservations',
                 onPress: () => router.push('/bookings'),
+              },
+              {
+                text: 'OK',
+                style: 'cancel',
               },
             ]
           );
@@ -249,6 +345,7 @@ export default function BookingPaymentScreen() {
       }
     } catch (error: any) {
       console.error('Payment error:', error);
+      setIsProcessing(false);
       setPaymentStatus('error');
       setShowPaymentModal(false);
       
@@ -398,18 +495,35 @@ export default function BookingPaymentScreen() {
       {/* Confirm Button */}
       <View style={styles.bottomContainer}>
         <Pressable 
-          style={[styles.confirmButton, !canProceed && styles.confirmButtonDisabled]}
-          disabled={!canProceed}
+          style={[
+            styles.confirmButton, 
+            (!canProceed || isProcessing) && styles.confirmButtonDisabled
+          ]}
+          disabled={!canProceed || isProcessing}
           onPress={handlePayment}
         >
-          <ThemedText style={[styles.confirmButtonText, !canProceed && styles.confirmButtonTextDisabled]}>
-            Confirmer le Paiement
-          </ThemedText>
-          <IconSymbol 
-            name="checkmark.circle" 
-            size={24} 
-            color={canProceed ? "#FFFFFF" : "#636366"} 
-          />
+          {isProcessing ? (
+            <>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ThemedText style={styles.confirmButtonText}>
+                Traitement en cours...
+              </ThemedText>
+            </>
+          ) : (
+            <>
+              <ThemedText style={[
+                styles.confirmButtonText, 
+                !canProceed && styles.confirmButtonTextDisabled
+              ]}>
+                Confirmer le Paiement
+              </ThemedText>
+              <IconSymbol 
+                name="checkmark.circle" 
+                size={24} 
+                color={canProceed ? "#FFFFFF" : "#636366"} 
+              />
+            </>
+          )}
         </Pressable>
       </View>
 

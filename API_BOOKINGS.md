@@ -187,8 +187,10 @@ Crée une nouvelle réservation avec sélection de sièges, articles buffet opti
     "updated_at": "2026-01-29T15:30:00Z"
   },
   "payment": {
-    "reference": "PAY123456789",
-    "status": "pending"
+    "bill_id": "5574350865",
+    "reference": "TXN-65F3A2B9C4D5E",
+    "status": "pending",
+    "message": "Veuillez vérifier votre téléphone pour procéder au paiement. Vous avez 30 secondes..."
   }
 }
 ```
