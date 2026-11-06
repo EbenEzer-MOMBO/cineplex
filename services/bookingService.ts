@@ -2,7 +2,7 @@
  * Service de gestion des réservations
  */
 
-import { buildApiUrl } from './config';
+import { apiClient } from './apiClient';
 
 // Types pour les réservations
 export interface BuffetItemRequest {
@@ -115,35 +115,7 @@ export async function createBooking(
   token: string,
   data: CreateBookingRequest
 ): Promise<CreateBookingResponse> {
-  try {
-    const response = await fetch(buildApiUrl('/bookings'), {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      // Gestion des erreurs de validation
-      if (result.errors) {
-        const errorMessages = Object.values(result.errors).flat().join('\n');
-        throw new Error(errorMessages);
-      }
-      throw new Error(result.message || 'Erreur lors de la création de la réservation');
-    }
-
-    return result;
-  } catch (error: any) {
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Impossible de se connecter au serveur');
-  }
+  return apiClient.post<CreateBookingResponse>('/bookings', data, { token });
 }
 
 /**
@@ -153,27 +125,7 @@ export async function getBookings(
   token: string,
   page: number = 1
 ): Promise<BookingsListResponse> {
-  try {
-    const response = await fetch(buildApiUrl(`/bookings?page=${page}`), {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Erreur lors de la récupération des réservations');
-    }
-
-    return await response.json();
-  } catch (error: any) {
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Impossible de se connecter au serveur');
-  }
+  return apiClient.get<BookingsListResponse>(`/bookings?page=${page}`, { token });
 }
 
 /**
@@ -183,28 +135,8 @@ export async function getBookingById(
   token: string,
   bookingId: number
 ): Promise<Booking> {
-  try {
-    const response = await fetch(buildApiUrl(`/bookings/${bookingId}`), {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Erreur lors de la récupération de la réservation');
-    }
-
-    const result = await response.json();
-    return result.data;
-  } catch (error: any) {
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Impossible de se connecter au serveur');
-  }
+  const result = await apiClient.get<{ data: Booking }>(`/bookings/${bookingId}`, { token });
+  return result.data;
 }
 
 /**
@@ -214,25 +146,5 @@ export async function cancelBooking(
   token: string,
   bookingId: number
 ): Promise<CancelBookingResponse> {
-  try {
-    const response = await fetch(buildApiUrl(`/bookings/${bookingId}/cancel`), {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Erreur lors de l\'annulation de la réservation');
-    }
-
-    return await response.json();
-  } catch (error: any) {
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Impossible de se connecter au serveur');
-  }
+  return apiClient.post<CancelBookingResponse>(`/bookings/${bookingId}/cancel`, undefined, { token });
 }

@@ -2,7 +2,7 @@
  * Service de gestion des favoris
  */
 
-import { buildApiUrl } from './config';
+import { apiClient } from './apiClient';
 
 // Types pour les favoris
 export interface MovieSession {
@@ -75,32 +75,9 @@ export async function getFavorites(
   token: string,
   status: FavoriteStatus = 'all'
 ): Promise<Favorite[]> {
-  try {
-    const url = status === 'all' 
-      ? buildApiUrl('/favorites')
-      : buildApiUrl(`/favorites?status=${status}`);
-      
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Erreur lors de la récupération des favoris');
-    }
-
-    const data: FavoritesResponse = await response.json();
-    return data.data;
-  } catch (error: any) {
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Impossible de se connecter au serveur');
-  }
+  const path = status === 'all' ? '/favorites' : `/favorites?status=${status}`;
+  const data = await apiClient.get<FavoritesResponse>(path, { token });
+  return data.data;
 }
 
 /**
@@ -110,35 +87,8 @@ export async function addFavorite(
   token: string,
   movieId: number
 ): Promise<Favorite> {
-  try {
-    const response = await fetch(buildApiUrl('/favorites'), {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ movie_id: movieId }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      // Si c'est une erreur de validation
-      if (result.errors) {
-        const errorMessages = Object.values(result.errors).flat().join('\n');
-        throw new Error(errorMessages);
-      }
-      throw new Error(result.message || 'Erreur lors de l\'ajout aux favoris');
-    }
-
-    return result.data;
-  } catch (error: any) {
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Impossible de se connecter au serveur');
-  }
+  const result = await apiClient.post<AddFavoriteResponse>('/favorites', { movie_id: movieId }, { token });
+  return result.data;
 }
 
 /**
@@ -148,28 +98,7 @@ export async function removeFavorite(
   token: string,
   favoriteId: number
 ): Promise<MessageResponse> {
-  try {
-    const response = await fetch(buildApiUrl(`/favorites/${favoriteId}`), {
-      method: 'DELETE',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.message || 'Erreur lors de la suppression du favori');
-    }
-
-    return result;
-  } catch (error: any) {
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Impossible de se connecter au serveur');
-  }
+  return apiClient.delete<MessageResponse>(`/favorites/${favoriteId}`, undefined, { token });
 }
 
 /**
@@ -179,26 +108,6 @@ export async function checkFavorite(
   token: string,
   movieId: number
 ): Promise<boolean> {
-  try {
-    const response = await fetch(buildApiUrl(`/favorites/check/${movieId}`), {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Erreur lors de la vérification');
-    }
-
-    const data: CheckFavoriteResponse = await response.json();
-    return data.is_favorite;
-  } catch (error: any) {
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Impossible de se connecter au serveur');
-  }
+  const data = await apiClient.get<CheckFavoriteResponse>(`/favorites/check/${movieId}`, { token });
+  return data.is_favorite;
 }

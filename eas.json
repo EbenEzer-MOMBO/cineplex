@@ -7,6 +7,9 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://10.0.2.2/api/v1"
+      },
       "android": {
         "gradleCommand": ":app:assembleDebug"
       },
@@ -16,6 +19,10 @@
     },
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://staging.cineplex.example/api/v1"
+      },
       "android": {
         "buildType": "apk"
       },
@@ -24,8 +31,12 @@
       }
     },
     "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://cineplex-main-fkwtm3.laravel.cloud/api/v1"
+      },
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
       },
       "ios": {
         "simulator": false

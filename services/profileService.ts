@@ -2,7 +2,7 @@
  * Service de gestion du profil client
  */
 
-import { buildApiUrl } from './config';
+import { apiClient } from './apiClient';
 
 // Types pour le profil
 export interface ProfileData {
@@ -21,6 +21,7 @@ export interface UpdateProfileRequest {
   name?: string;
   email?: string;
   phone?: string;
+  current_password?: string;
 }
 
 export interface ChangePasswordRequest {
@@ -34,66 +35,35 @@ export interface ApiResponse<T = any> {
   message: string;
   data?: T;
   errors?: Record<string, string[]>;
+  requires_email_confirmation?: boolean;
 }
 
 /**
  * Récupère le profil du client authentifié
  */
 export async function getProfile(token: string): Promise<ProfileData> {
-  const response = await fetch(buildApiUrl('/profile'), {
-    method: 'GET',
-    headers: {
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || 'Erreur lors de la récupération du profil');
-  }
-
-  const data = await response.json();
+  const data = await apiClient.get<{ data: ProfileData }>('/profile', { token });
   return data.data;
 }
 
 /**
- * Met à jour le profil du client
+ * Met à jour le profil du client (S-08: un changement d'email déclenche un OTP).
  */
 export async function updateProfile(
   token: string,
   data: UpdateProfileRequest
 ): Promise<ApiResponse<ProfileData>> {
-  try {
-    const response = await fetch(buildApiUrl('/profile'), {
-      method: 'PUT',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
+  return apiClient.put<ApiResponse<ProfileData>>('/profile', data, { token });
+}
 
-    const result = await response.json();
-
-    if (!response.ok) {
-      // Si c'est une erreur de validation, on affiche les détails
-      if (result.errors) {
-        const errorMessages = Object.values(result.errors).flat().join('\n');
-        throw new Error(errorMessages);
-      }
-      throw new Error(result.message || 'Erreur lors de la mise à jour du profil');
-    }
-
-    return result;
-  } catch (error: any) {
-    // Si c'est une erreur réseau ou autre
-    if (error.message) {
-      throw error;
-    }
-    throw new Error('Impossible de se connecter au serveur');
-  }
+/**
+ * S-08: confirme le changement d'adresse email avec le code OTP reçu.
+ */
+export async function confirmEmailChange(
+  token: string,
+  otpCode: string
+): Promise<ApiResponse<ProfileData>> {
+  return apiClient.post<ApiResponse<ProfileData>>('/profile/confirm-email', { otp_code: otpCode }, { token });
 }
 
 /**
@@ -103,42 +73,12 @@ export async function changePassword(
   token: string,
   data: ChangePasswordRequest
 ): Promise<ApiResponse> {
-  const response = await fetch(buildApiUrl('/profile/change-password'), {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
-
-  const result = await response.json();
-
-  if (!response.ok) {
-    throw new Error(result.message || 'Erreur lors du changement de mot de passe');
-  }
-
-  return result;
+  return apiClient.post<ApiResponse>('/profile/change-password', data, { token });
 }
 
 /**
  * Supprime le compte du client
  */
 export async function deleteAccount(token: string): Promise<ApiResponse> {
-  const response = await fetch(buildApiUrl('/profile'), {
-    method: 'DELETE',
-    headers: {
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-
-  const result = await response.json();
-
-  if (!response.ok) {
-    throw new Error(result.message || 'Erreur lors de la suppression du compte');
-  }
-
-  return result;
+  return apiClient.delete<ApiResponse>('/profile', undefined, { token });
 }
