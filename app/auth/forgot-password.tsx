@@ -1,18 +1,38 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { authService } from '@/services/auth';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleResetPassword = () => {
-    // TODO: Implement reset password logic
-    console.log('Reset password for:', email);
-    router.push('/auth/otp');
+  const handleResetPassword = async () => {
+    if (!email || isLoading) return;
+
+    setIsLoading(true);
+    try {
+      // S-08: the backend always responds uniformly (no account enumeration).
+      await authService.forgotPassword(email.trim());
+      Alert.alert(
+        'Code envoyé',
+        'Si un compte correspond à cette adresse, un code de réinitialisation a été envoyé par email.',
+      );
+      router.push({ pathname: '/auth/reset-password', params: { email: email.trim() } });
+    } catch {
+      // Even on error we avoid leaking whether the account exists.
+      Alert.alert(
+        'Code envoyé',
+        'Si un compte correspond à cette adresse, un code de réinitialisation a été envoyé par email.',
+      );
+      router.push({ pathname: '/auth/reset-password', params: { email: email.trim() } });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -71,11 +91,15 @@ export default function ForgotPasswordScreen() {
 
         {/* Send Code Button */}
         <Pressable
-          style={[styles.sendButton, !email && styles.sendButtonDisabled]}
+          style={[styles.sendButton, (!email || isLoading) && styles.sendButtonDisabled]}
           onPress={handleResetPassword}
-          disabled={!email}
+          disabled={!email || isLoading}
         >
-          <ThemedText style={styles.sendButtonText}>Envoyer le code</ThemedText>
+          {isLoading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.sendButtonText}>Envoyer le code</ThemedText>
+          )}
         </Pressable>
 
         {/* Back to Login */}

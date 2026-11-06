@@ -1,4 +1,5 @@
-import { buildApiUrl } from './config';
+import { apiClient } from './apiClient';
+import { logger } from './logger';
 
 // Types pour les réponses de l'API
 export interface InitiatePaymentRequest {
@@ -93,39 +94,7 @@ export async function initiatePayment(
   token: string,
   request: InitiatePaymentRequest
 ): Promise<InitiatePaymentResponse> {
-  try {
-    console.log('Initiation du paiement avec:', {
-      url: buildApiUrl('/payments/initiate'),
-      request,
-    });
-
-    const response = await fetch(buildApiUrl('/payments/initiate'), {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify(request),
-    });
-
-    const data = await response.json();
-    console.log('Réponse de l\'API:', { status: response.status, data });
-
-    if (!response.ok) {
-      // Si c'est une erreur de validation (422), afficher les détails
-      if (response.status === 422 && data.errors) {
-        const errorMessages = Object.values(data.errors).flat().join(', ');
-        throw new Error(errorMessages || data.message || 'Erreur de validation');
-      }
-      throw new Error(data.message || 'Erreur lors de l\'initiation du paiement');
-    }
-
-    return data;
-  } catch (error) {
-    console.error('Erreur initiatePayment:', error);
-    throw error;
-  }
+  return apiClient.post<InitiatePaymentResponse>('/payments/initiate', request, { token });
 }
 
 /**
@@ -135,27 +104,7 @@ export async function verifyPayment(
   token: string,
   request: VerifyPaymentRequest
 ): Promise<VerifyPaymentResponse> {
-  try {
-    const response = await fetch(buildApiUrl('/payments/verify'), {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Erreur lors de la vérification du paiement');
-    }
-
-    return data;
-  } catch (error) {
-    console.error('Erreur verifyPayment:', error);
-    throw error;
-  }
+  return apiClient.post<VerifyPaymentResponse>('/payments/verify', request, { token });
 }
 
 /**
@@ -171,28 +120,25 @@ export async function verifyPaymentWithPolling(
   maxAttempts: number = 20,
   intervalMs: number = 3000
 ): Promise<VerifyPaymentResponse> {
-  console.log(`Début du polling: ${maxAttempts} tentatives, intervalle ${intervalMs}ms`);
-  
+  logger.log(`Début du polling: ${maxAttempts} tentatives, intervalle ${intervalMs}ms`);
+
   for (let i = 0; i < maxAttempts; i++) {
-    console.log(`Tentative ${i + 1}/${maxAttempts} - Vérification du paiement...`);
     const result = await verifyPayment(token, { bill_id: billId });
-    
-    console.log(`Résultat tentative ${i + 1}:`, result.status);
+
+    logger.log(`Résultat tentative ${i + 1}/${maxAttempts}:`, result.status);
 
     if (result.status === 'completed' || result.status === 'failed') {
-      console.log(`Paiement terminé avec statut: ${result.status}`);
       return result;
     }
 
     // Attendre avant la prochaine tentative (sauf pour la dernière)
     if (i < maxAttempts - 1) {
-      console.log(`Attente de ${intervalMs}ms avant la prochaine tentative...`);
       await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
   }
 
   // Timeout
-  console.log('Timeout: délai de paiement expiré');
+  logger.log('Timeout: délai de paiement expiré');
   return {
     success: false,
     status: 'failed',
@@ -207,27 +153,7 @@ export async function cancelPayment(
   token: string,
   request: CancelPaymentRequest
 ): Promise<CancelPaymentResponse> {
-  try {
-    const response = await fetch(buildApiUrl('/payments/cancel'), {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Erreur lors de l\'annulation du paiement');
-    }
-
-    return data;
-  } catch (error) {
-    console.error('Erreur cancelPayment:', error);
-    throw error;
-  }
+  return apiClient.post<CancelPaymentResponse>('/payments/cancel', request, { token });
 }
 
 /**
@@ -238,28 +164,10 @@ export async function getPaymentHistory(
   page: number = 1,
   perPage: number = 15
 ): Promise<PaymentHistoryResponse> {
-  try {
-    const response = await fetch(
-      buildApiUrl(`/payments/history?page=${page}&per_page=${perPage}`),
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Erreur lors de la récupération de l\'historique');
-    }
-
-    return data;
-  } catch (error) {
-    console.error('Erreur getPaymentHistory:', error);
-    throw error;
-  }
+  return apiClient.get<PaymentHistoryResponse>(
+    `/payments/history?page=${page}&per_page=${perPage}`,
+    { token }
+  );
 }
 
 /**

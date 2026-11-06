@@ -1,4 +1,6 @@
+import { setUnauthorizedHandler } from '@/services/apiClient';
 import { authService } from '@/services/auth';
+import { logger } from '@/services/logger';
 import { Customer } from '@/types/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
@@ -21,10 +23,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Charger les données d'authentification au démarrage
   useEffect(() => {
     loadAuthData();
+
+    // M-02: any HTTP 401 from any service clears the session globally,
+    // instead of relying on fragile message-string comparisons.
+    setUnauthorizedHandler(() => {
+      authService.clearAuth().catch((error) => logger.error('clearAuth error', error));
+      setCustomer(null);
+    });
+
+    return () => setUnauthorizedHandler(null);
   }, []);
 
   const loadAuthData = async () => {
     try {
+      // getToken() also primes the apiClient with the stored token.
       const token = await authService.getToken();
       const storedCustomer = await authService.getCustomer();
 
@@ -32,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCustomer(storedCustomer);
       }
     } catch (error) {
-      console.error('Error loading auth data:', error);
+      logger.error('Error loading auth data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -54,11 +66,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await authService.getProfile();
       setCustomer(result.customer);
     } catch (error) {
-      console.error('Error refreshing profile:', error);
-      // Si l'erreur est 401, déconnecter l'utilisateur
-      if ((error as any)?.message === 'Unauthenticated.') {
-        await logout();
-      }
+      // A 401 is already handled globally by the apiClient unauthorized hook.
+      logger.error('Error refreshing profile:', error);
     }
   };
 
@@ -86,4 +95,3 @@ export function useAuth() {
   }
   return context;
 }
-
